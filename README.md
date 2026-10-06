@@ -1,6 +1,14 @@
 # 📄 AI Resume Screener v2
 
-An advanced resume-job description matcher using **TF-IDF**, **Word2Vec**, **keyword similarity**, and **GPT-3.5** suggestions — built entirely with your existing Python/NLP/ML skills.
+> Compare a resume against a job description and get a weighted match score, skill-gap breakdown, and five targeted improvement suggestions.
+
+[https://ai-resume-screener-w6h3.onrender.com](https://ai-resume-screener-w6h3.onrender.com) · [https://ashutosh8950.github.io/Portfolio/](https://ashutosh8950.github.io/Portfolio/)
+
+*Free-tier hosting: the first load can take about a minute while the service wakes up.*
+
+Match scoring runs without any key. GPT-3.5 suggestions need your own OpenAI API key, entered in the sidebar for that session.
+
+An advanced resume-job description matcher using **TF-IDF**, **Word2Vec**, **keyword similarity**, and **GPT-3.5** suggestions.
 
 ---
 
@@ -103,21 +111,6 @@ Output:
 - Ranked table of jobs by match %
 - Grouped bar chart (TF-IDF / Keywords / Word2Vec / Overall per job)
 - Deep-dive skill gap for the top match
-
----
-
-## 📌 Resume Bullet Points (copy-paste ready)
-
-```
-AI Resume Screener v2 | Python, Scikit-learn, Gensim, PyPDF2, OpenAI, Streamlit, Plotly
-
-• Built a resume-job matcher scoring TF-IDF (sklearn), Word2Vec semantic similarity (gensim), and keyword overlap.
-• Trained Word2Vec on resume+JD corpus to capture semantic relationships beyond exact keyword matching.
-• Added PDF resume parsing using PyPDF2 with multi-page extraction and text cleaning pipeline.
-• Built a Batch Mode to rank one resume against up to 6 job descriptions simultaneously.
-• Integrated GPT-3.5 via prompt engineering to generate 5 personalized, actionable resume improvement tips.
-• Visualized results using an interactive Streamlit dashboard with Plotly grouped bar and donut charts.
-```
 
 ---
 
