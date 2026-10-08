@@ -21,3 +21,13 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 if LOG_LEVEL not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
     LOG_LEVEL = "INFO"
+
+EMBEDDINGS_ENABLED = os.getenv("EMBEDDINGS_ENABLED", "true").strip().lower() in {
+    "1", "true", "yes", "on"
+}
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
+SEMANTIC_WEIGHT = 0.40
+KEYWORD_WEIGHT = 0.30
+TFIDF_WEIGHT = 0.30
+FALLBACK_KEYWORD_WEIGHT = 0.50
+FALLBACK_TFIDF_WEIGHT = 0.50

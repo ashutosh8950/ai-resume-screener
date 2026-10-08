@@ -2,7 +2,7 @@
 app.py  (v2 — upgraded)
 Streamlit UI with three new features:
   1. PDF resume upload (PyPDF2)
-  2. Word2Vec semantic similarity score (gensim)
+    2. Pretrained semantic similarity score (FastEmbed ONNX)
   3. Batch mode — 1 resume vs multiple JDs
 """
 
@@ -11,7 +11,17 @@ import html
 import streamlit as st
 
 from resume_screener.analyzer import ResumeAnalyzer
-from resume_screener.config import MAX_BATCH_JDS, MAX_TEXT_CHARS, MAX_UPLOAD_MB, OPENAI_API_KEY
+from resume_screener.config import (
+    FALLBACK_KEYWORD_WEIGHT,
+    FALLBACK_TFIDF_WEIGHT,
+    KEYWORD_WEIGHT,
+    MAX_BATCH_JDS,
+    MAX_TEXT_CHARS,
+    MAX_UPLOAD_MB,
+    OPENAI_API_KEY,
+    SEMANTIC_WEIGHT,
+    TFIDF_WEIGHT,
+)
 from resume_screener.pdf_parser import PDFParseError, PDFParser
 from resume_screener.visualizer import plot_batch_chart, plot_score_breakdown, plot_skill_chart
 
@@ -54,7 +64,7 @@ h1,h2,h3 { color: #f0eeff; }
                 border-radius:20px; padding:3px 11px; font-size:.76rem; display:inline-block; margin:3px; }
 .tag-missing  { background:rgba(255,107,107,.12); border:1px solid rgba(255,107,107,.35); color:#ff6b6b;
                 border-radius:20px; padding:3px 11px; font-size:.76rem; display:inline-block; margin:3px; }
-.tag-w2v      { background:rgba(124,107,255,.12); border:1px solid rgba(124,107,255,.35); color:#b8a9ff;
+.tag-semantic  { background:rgba(124,107,255,.12); border:1px solid rgba(124,107,255,.35); color:#b8a9ff;
                 border-radius:20px; padding:3px 11px; font-size:.76rem; display:inline-block; margin:3px; }
 .batch-row    { background:#13131a; border:1px solid #2a2840; border-radius:10px;
                 padding:.9rem 1.1rem; margin-bottom:.6rem; }
@@ -78,22 +88,26 @@ with st.sidebar:
     api_key = st.text_input("OpenAI API Key", type="password", placeholder="sk-...") or OPENAI_API_KEY
     st.markdown("---")
     st.markdown("**Scoring weights:**")
-    st.markdown("""
+    st.markdown(f"""
 | Method | Weight |
 |---|---|
-| TF-IDF similarity | 35% |
-| Keyword match | 35% |
-| Word2Vec semantic | 30% |
+| Semantic embeddings | {SEMANTIC_WEIGHT:.0%} |
+| Keyword match | {KEYWORD_WEIGHT:.0%} |
+| TF-IDF similarity | {TFIDF_WEIGHT:.0%} |
     """)
+    st.caption(
+        "Fallback when embeddings are disabled or unavailable: "
+        f"Keyword {FALLBACK_KEYWORD_WEIGHT:.0%} + TF-IDF {FALLBACK_TFIDF_WEIGHT:.0%}."
+    )
     st.markdown("---")
     st.markdown("**New in v2:**")
-    st.markdown("- 📎 PDF resume upload\n- 🧠 Word2Vec semantic score\n- 📊 Batch mode (1 vs many)")
+    st.markdown("- 📎 PDF resume upload\n- 🧠 Semantic evidence and requirement gaps\n- 📊 Batch mode (1 vs many)")
     st.markdown("---")
-    st.markdown("<p style='color:#5c5880;font-size:.78rem;'>Python · Sklearn · Gensim · PyPDF2 · OpenAI · Streamlit</p>", unsafe_allow_html=True)
+    st.markdown("<p style='color:#5c5880;font-size:.78rem;'>Python · Sklearn · FastEmbed ONNX · PyPDF2 · OpenAI · Streamlit</p>", unsafe_allow_html=True)
 
 # ── Header ────────────────────────────────────────────────────────────────────
 st.markdown("## 📄 AI Resume Screener &nbsp; <span style='font-size:.75rem;background:#23233a;color:#9b96c9;padding:3px 10px;border-radius:20px;vertical-align:middle;'>v2</span>", unsafe_allow_html=True)
-st.markdown("<p style='color:#9b96c9;font-size:.88rem;margin-top:-.3rem;'>TF-IDF · Keyword Match · Word2Vec · GPT Suggestions · PDF Upload · Batch Mode</p>", unsafe_allow_html=True)
+st.markdown("<p style='color:#9b96c9;font-size:.88rem;margin-top:-.3rem;'>Semantic Match · TF-IDF · Keyword Match · GPT Suggestions · PDF Upload · Batch Mode</p>", unsafe_allow_html=True)
 st.divider()
 
 # ── Tabs ──────────────────────────────────────────────────────────────────────
@@ -114,7 +128,7 @@ with tab1:
 
         resume_text = ""
         if resume_input_mode == "Upload PDF":
-            pdf_file = st.file_uploader("Upload resume PDF", type=["pdf"], key="resume_pdf")
+            pdf_file = st.file_uploader(f"Upload resume PDF (max {MAX_UPLOAD_MB} MB)", type=["pdf"], key="resume_pdf")
             if pdf_file:
                 resume_text, pages = _read_pdf(pdf_file, "Resume")
                 if resume_text:
@@ -142,7 +156,7 @@ with tab1:
         if not resume_text.strip() or not jd_text.strip():
             st.error("Please provide both resume and job description.")
         else:
-            with st.spinner("Running analysis (TF-IDF + Word2Vec + Keyword)..."):
+            with st.spinner("Running semantic, TF-IDF, and keyword analysis..."):
                 analyzer = ResumeAnalyzer()
                 results  = analyzer.analyze(resume_text, jd_text)
 
@@ -151,7 +165,7 @@ with tab1:
 
             tfidf_pct   = int(results["tfidf_score"]   * 100)
             kw_pct      = int(results["keyword_score"] * 100)
-            w2v_pct     = int(results["w2v_score"]     * 100)
+            semantic_pct = int(results["semantic_score"] * 100)
             overall_pct = int(results["overall_score"] * 100)
 
             def sc(p):
@@ -163,7 +177,7 @@ with tab1:
             for col, label, val, sub in [
                 (c1, "TF-IDF Similarity",   tfidf_pct,   "term importance"),
                 (c2, "Keyword Match",        kw_pct,      "ATS simulation"),
-                (c3, "Word2Vec Semantic",    w2v_pct,     "meaning-level match"),
+                (c3, "Semantic Match",       semantic_pct, "requirement-level match"),
                 (c4, "Overall Score",        overall_pct, "weighted average"),
             ]:
                 with col:
@@ -185,14 +199,34 @@ with tab1:
                 vt = "❌ Weak Match — significant improvements needed."
             st.markdown(f"<div class='verdict-box' style='{vs}'>{vt}</div>", unsafe_allow_html=True)
 
-            if not results["w2v_used"]:
-                st.info(results["w2v_message"])
+            if not results["embeddings_used"]:
+                st.info(results["embedding_message"])
+
+            st.markdown("### Why this score")
+            if results["matched_pairs"]:
+                for pair in results["matched_pairs"]:
+                    st.markdown(f"**Strong match · {pair['score']:.0%}**")
+                    st.write("JD requirement:", pair["requirement"])
+                    st.write("Resume evidence:", pair["evidence"])
+            elif results["embeddings_used"]:
+                st.write("No JD requirements reached the strong-match threshold.")
+            else:
+                st.write("Requirement-level evidence is unavailable in fallback mode.")
+
+            st.markdown("**Gaps**")
+            if results["gaps"]:
+                for gap in results["gaps"]:
+                    st.write(f"{gap['score']:.0%} match:", gap["requirement"])
+            elif results["embeddings_used"]:
+                st.write("No unmatched requirements detected.")
+            else:
+                st.write("Gap analysis requires semantic embeddings.")
 
             # Charts
             ch1, ch2 = st.columns(2)
             with ch1:
                 st.plotly_chart(
-                    plot_score_breakdown(tfidf_pct, kw_pct, w2v_pct, overall_pct),
+                    plot_score_breakdown(tfidf_pct, kw_pct, semantic_pct, overall_pct),
                     use_container_width=True
                 )
             with ch2:
@@ -213,16 +247,6 @@ with tab1:
                 tags = " ".join([f"<span class='tag-missing'>{html.escape(s)}</span>" for s in results["missing_skills"]])
                 st.markdown(tags or "<span class='tag-matched'>All covered!</span>", unsafe_allow_html=True)
 
-            # Word2Vec related terms
-            if results["w2v_terms"]:
-                st.markdown("### 🧠 Word2Vec — Semantically Related Terms")
-                st.markdown("<p style='color:#9b96c9;font-size:.82rem;'>Terms the model found semantically similar in your resume/JD — shows what concepts cluster together.</p>", unsafe_allow_html=True)
-                tags = " ".join([
-                    f"<span class='tag-w2v'>{html.escape(w)} <span style='opacity:.6'>({s})</span></span>"
-                    for w, s in results["w2v_terms"]
-                ])
-                st.markdown(tags, unsafe_allow_html=True)
-
             # GPT suggestions
             st.markdown("### 🤖 GPT Improvement Suggestions")
             if api_key:
@@ -239,15 +263,14 @@ with tab1:
                 st.json({
                     "tfidf_score":        round(results["tfidf_score"], 4),
                     "keyword_score":      round(results["keyword_score"], 4),
-                    "w2v_score":          round(results["w2v_score"], 4),
+                    "semantic_score":     round(results["semantic_score"], 4),
                     "overall_score":      round(results["overall_score"], 4),
                     "resume_tokens":      results["resume_token_count"],
                     "jd_tokens":          results["jd_token_count"],
                     "matched_skills":     len(results["matched_skills"]),
                     "missing_skills":     len(results["missing_skills"]),
-                    "w2v_available":      results["w2v_available"],
-                    "w2v_status":         results["w2v_status"],
-                    "scoring_method":     results["scoring_method"],
+                    "embeddings_used":    results["embeddings_used"],
+                    "scoring_mode":       results["scoring_mode"],
                 })
 
 
@@ -264,7 +287,7 @@ with tab2:
 
     batch_resume = ""
     if batch_resume_mode == "Upload PDF":
-        b_pdf = st.file_uploader("Upload resume PDF", type=["pdf"], key="batch_pdf")
+        b_pdf = st.file_uploader(f"Upload resume PDF (max {MAX_UPLOAD_MB} MB)", type=["pdf"], key="batch_pdf")
         if b_pdf:
             batch_resume, pages = _read_pdf(b_pdf, "Resume")
             if batch_resume:
@@ -314,7 +337,7 @@ with tab2:
                         "overall": int(r["overall_score"] * 100),
                         "tfidf":   int(r["tfidf_score"]   * 100),
                         "kw":      int(r["keyword_score"] * 100),
-                        "w2v":     int(r["w2v_score"]     * 100),
+                        "semantic": int(r["semantic_score"] * 100),
                         "matched": len(r["matched_skills"]),
                         "missing": len(r["missing_skills"]),
                         "matched_list": r["matched_skills"],
@@ -350,7 +373,7 @@ with tab2:
                     <span style='font-size:.75rem;color:#9b96c9;'>
                         TF-IDF: <b style='color:#f0eeff'>{br['tfidf']}%</b> &nbsp;|&nbsp;
                         Keywords: <b style='color:#f0eeff'>{br['kw']}%</b> &nbsp;|&nbsp;
-                        Word2Vec: <b style='color:#f0eeff'>{br['w2v']}%</b> &nbsp;|&nbsp;
+                        Semantic: <b style='color:#f0eeff'>{br['semantic']}%</b> &nbsp;|&nbsp;
                         Matched skills: <b style='color:#3ddfa0'>{br['matched']}</b> &nbsp;|&nbsp;
                         Missing: <b style='color:#ff6b6b'>{br['missing']}</b>
                     </span>

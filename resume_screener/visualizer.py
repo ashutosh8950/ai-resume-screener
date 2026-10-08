@@ -31,9 +31,9 @@ def _color(value):
     return RED
 
 
-def plot_score_breakdown(tfidf: int, keyword: int, w2v: int, overall: int) -> go.Figure:
-    labels = ["TF-IDF Similarity", "Keyword Match", "Word2Vec Semantic", "Overall Score"]
-    values = [tfidf, keyword, w2v, overall]
+def plot_score_breakdown(tfidf: int, keyword: int, semantic: int, overall: int) -> go.Figure:
+    labels = ["TF-IDF Similarity", "Keyword Match", "Semantic Match", "Overall Score"]
+    values = [tfidf, keyword, semantic, overall]
     fig = go.Figure(go.Bar(
         x=values,
         y=labels,
@@ -88,7 +88,7 @@ def plot_batch_chart(batch_results: list) -> go.Figure:
     series = [
         ("TF-IDF", [result["tfidf"] for result in batch_results], ACCENT),
         ("Keywords", [result["kw"] for result in batch_results], PURPLE),
-        ("Word2Vec", [result["w2v"] for result in batch_results], "#5de0d4"),
+        ("Semantic", [result["semantic"] for result in batch_results], "#5de0d4"),
         ("Overall", [result["overall"] for result in batch_results], GREEN),
     ]
     fig = go.Figure()

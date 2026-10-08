@@ -1,43 +1,31 @@
-"""Technical skill vocabulary and alias-aware extraction."""
+"""Categorized technical and professional skills loaded from JSON."""
 
+import json
 import re
+from pathlib import Path
 
+
+_SKILLS_PATH = Path(__file__).with_name("skills.json")
+with _SKILLS_PATH.open(encoding="utf-8") as skills_file:
+    SKILL_CATEGORIES = json.load(skills_file)
 
 TECH_SKILLS = [
-    "python", "java", "javascript", "typescript", "sql", "r", "c++", "c#", "c", "go", "rust", "scala",
-    "tensorflow", "keras", "pytorch", "scikit-learn", "sklearn", "xgboost", "lightgbm",
-    "nlp", "bert", "gpt", "t5", "transformers", "spacy", "nltk", "word2vec", "glove",
-    "fasttext", "tfidf", "tf-idf", "word embeddings", "sentence transformers", "langchain",
-    "pandas", "numpy", "matplotlib", "seaborn", "plotly", "tableau", "power bi",
-    "machine learning", "deep learning", "neural networks", "computer vision",
-    "random forest", "logistic regression", "svm", "naive bayes", "gradient boosting",
-    "classification", "regression", "clustering", "recommendation", "reinforcement learning",
-    "git", "github", "docker", "kubernetes", "aws", "gcp", "azure", "mlflow", "airflow",
-    "flask", "fastapi", "streamlit", "jupyter", "linux", "node.js", ".net",
-    "mysql", "postgresql", "mongodb", "redis", "sqlite",
-    "speech recognition", "text to speech", "tts", "stt", "gtts", "pyttsx3",
-    "api", "rest api", "opencv", "hadoop", "spark", "data visualization",
-    "prompt engineering", "openai", "hugging face", "data mining", "statistics",
-    "data analysis", "feature engineering", "model deployment",
+    entry["name"]
+    for category in SKILL_CATEGORIES.values()
+    for entry in category
 ]
-
 SKILL_ALIASES = {
-    "js": "javascript",
-    "ecmascript": "javascript",
-    "ml": "machine learning",
-    "machine-learning": "machine learning",
-    "nodejs": "node.js",
-    "node js": "node.js",
-    "dotnet": ".net",
-    "c sharp": "c#",
-    "c-sharp": "c#",
-    "cpp": "c++",
-    "c plus plus": "c++",
+    alias.lower(): entry["name"]
+    for category in SKILL_CATEGORIES.values()
+    for entry in category
+    for alias in entry["aliases"]
 }
 
 
 def _contains_skill(text: str, skill: str) -> bool:
     pattern = r"(?<![A-Za-z0-9_])" + re.escape(skill) + r"(?![A-Za-z0-9_])"
+    if skill == "c":
+        pattern = r"(?<![A-Za-z0-9_])c(?![A-Za-z0-9_+#])"
     return re.search(pattern, text, flags=re.IGNORECASE) is not None
 
 
