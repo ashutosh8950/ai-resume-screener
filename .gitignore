@@ -1,1 +1,13 @@
-venv/ 
+venv/
+__pycache__/
+.env
+.env.*
+!.env.example
+logs/
+*.log
+.pytest_cache/
+.idea/
+.vscode/
+uploads/
+uploaded_files/
+user_uploads/

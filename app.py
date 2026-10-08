@@ -6,10 +6,33 @@ Streamlit UI with three new features:
   3. Batch mode — 1 resume vs multiple JDs
 """
 
+import html
+
 import streamlit as st
-from analyzer import ResumeAnalyzer
-from pdf_parser import PDFParser
-from visualizer import plot_score_breakdown, plot_skill_chart, plot_batch_chart
+
+from resume_screener.analyzer import ResumeAnalyzer
+from resume_screener.config import MAX_BATCH_JDS, MAX_TEXT_CHARS, MAX_UPLOAD_MB, OPENAI_API_KEY
+from resume_screener.pdf_parser import PDFParseError, PDFParser
+from resume_screener.visualizer import plot_batch_chart, plot_score_breakdown, plot_skill_chart
+
+
+def _limit_text(text: str, label: str) -> str:
+    if len(text) > MAX_TEXT_CHARS:
+        st.warning(f"{label} exceeded {MAX_TEXT_CHARS:,} characters and was truncated.")
+        return text[:MAX_TEXT_CHARS]
+    return text
+
+
+def _read_pdf(uploaded_file, label: str) -> tuple[str, int]:
+    if uploaded_file.size > MAX_UPLOAD_MB * 1024 * 1024:
+        st.error(f"{label} must be no larger than {MAX_UPLOAD_MB} MB.")
+        return "", 0
+    try:
+        text, page_count = PDFParser().parse(uploaded_file.getvalue())
+    except PDFParseError as error:
+        st.error(str(error))
+        return "", 0
+    return _limit_text(text, label), page_count
 
 st.set_page_config(page_title="AI Resume Screener v2", page_icon="📄", layout="wide")
 
@@ -52,7 +75,7 @@ div[data-testid="stExpander"]     { border:1px solid #2a2840!important; border-r
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("### ⚙️ Settings")
-    api_key = st.text_input("OpenAI API Key", type="password", placeholder="sk-...")
+    api_key = st.text_input("OpenAI API Key", type="password", placeholder="sk-...") or OPENAI_API_KEY
     st.markdown("---")
     st.markdown("**Scoring weights:**")
     st.markdown("""
@@ -93,17 +116,16 @@ with tab1:
         if resume_input_mode == "Upload PDF":
             pdf_file = st.file_uploader("Upload resume PDF", type=["pdf"], key="resume_pdf")
             if pdf_file:
-                parser      = PDFParser()
-                raw_bytes   = pdf_file.read()
-                resume_text = parser.extract_text(raw_bytes)
-                pages       = parser.get_page_count(raw_bytes)
-                st.success(f"✅ Extracted {len(resume_text.split())} words from {pages} page(s)")
-                with st.expander("Preview extracted text"):
-                    st.text(resume_text[:800] + ("..." if len(resume_text) > 800 else ""))
+                resume_text, pages = _read_pdf(pdf_file, "Resume")
+                if resume_text:
+                    st.success(f"✅ Extracted {len(resume_text.split())} words from {pages} page(s)")
+                    with st.expander("Preview extracted text"):
+                        st.text(resume_text[:800] + ("..." if len(resume_text) > 800 else ""))
         else:
             resume_text = st.text_area("", height=280,
                 placeholder="Paste your resume text here...", key="resume_ta",
                 label_visibility="collapsed")
+            resume_text = _limit_text(resume_text, "Resume")
 
     # ── JD input ──────────────────────────────────────────────────────────────
     with col2:
@@ -111,6 +133,7 @@ with tab1:
         jd_text = st.text_area("", height=280,
             placeholder="Paste the job description here...", key="jd_ta",
             label_visibility="collapsed")
+        jd_text = _limit_text(jd_text, "Job description")
 
     analyze_btn = st.button("🔍  Analyze Match", key="analyze_single")
 
@@ -162,6 +185,9 @@ with tab1:
                 vt = "❌ Weak Match — significant improvements needed."
             st.markdown(f"<div class='verdict-box' style='{vs}'>{vt}</div>", unsafe_allow_html=True)
 
+            if not results["w2v_used"]:
+                st.info(results["w2v_message"])
+
             # Charts
             ch1, ch2 = st.columns(2)
             with ch1:
@@ -180,11 +206,11 @@ with tab1:
             sk1, sk2 = st.columns(2)
             with sk1:
                 st.markdown("**✅ Matched Skills**")
-                tags = " ".join([f"<span class='tag-matched'>{s}</span>" for s in results["matched_skills"]])
+                tags = " ".join([f"<span class='tag-matched'>{html.escape(s)}</span>" for s in results["matched_skills"]])
                 st.markdown(tags or "<span class='tag-missing'>None detected</span>", unsafe_allow_html=True)
             with sk2:
                 st.markdown("**❌ Missing Skills**")
-                tags = " ".join([f"<span class='tag-missing'>{s}</span>" for s in results["missing_skills"]])
+                tags = " ".join([f"<span class='tag-missing'>{html.escape(s)}</span>" for s in results["missing_skills"]])
                 st.markdown(tags or "<span class='tag-matched'>All covered!</span>", unsafe_allow_html=True)
 
             # Word2Vec related terms
@@ -192,7 +218,7 @@ with tab1:
                 st.markdown("### 🧠 Word2Vec — Semantically Related Terms")
                 st.markdown("<p style='color:#9b96c9;font-size:.82rem;'>Terms the model found semantically similar in your resume/JD — shows what concepts cluster together.</p>", unsafe_allow_html=True)
                 tags = " ".join([
-                    f"<span class='tag-w2v'>{w} <span style='opacity:.6'>({s})</span></span>"
+                    f"<span class='tag-w2v'>{html.escape(w)} <span style='opacity:.6'>({s})</span></span>"
                     for w, s in results["w2v_terms"]
                 ])
                 st.markdown(tags, unsafe_allow_html=True)
@@ -204,7 +230,7 @@ with tab1:
                     suggestions = analyzer.get_gpt_suggestions(resume_text, jd_text, results, api_key)
                 st.markdown(f"""<div style='background:#13131a;border:1px solid #2a2840;border-radius:12px;
                     padding:1.2rem;font-size:.86rem;line-height:1.85;color:#c8c4f0;
-                    white-space:pre-wrap;'>{suggestions}</div>""", unsafe_allow_html=True)
+                    white-space:pre-wrap;'>{html.escape(suggestions)}</div>""", unsafe_allow_html=True)
             else:
                 st.info("💡 Add your OpenAI API key in the sidebar to get GPT-powered improvement suggestions.")
 
@@ -220,6 +246,8 @@ with tab1:
                     "matched_skills":     len(results["matched_skills"]),
                     "missing_skills":     len(results["missing_skills"]),
                     "w2v_available":      results["w2v_available"],
+                    "w2v_status":         results["w2v_status"],
+                    "scoring_method":     results["scoring_method"],
                 })
 
 
@@ -238,20 +266,21 @@ with tab2:
     if batch_resume_mode == "Upload PDF":
         b_pdf = st.file_uploader("Upload resume PDF", type=["pdf"], key="batch_pdf")
         if b_pdf:
-            parser       = PDFParser()
-            raw_bytes    = b_pdf.read()
-            batch_resume = parser.extract_text(raw_bytes)
-            st.success(f"✅ {len(batch_resume.split())} words extracted")
+            batch_resume, pages = _read_pdf(b_pdf, "Resume")
+            if batch_resume:
+                st.success(f"✅ {len(batch_resume.split())} words extracted from {pages} page(s)")
     else:
         batch_resume = st.text_area("", height=180,
             placeholder="Paste your resume text here...", key="batch_resume_ta",
             label_visibility="collapsed")
+        batch_resume = _limit_text(batch_resume, "Resume")
 
     st.markdown("---")
 
     # JD inputs
     st.markdown("**💼 Job Descriptions (add up to 6)**")
-    num_jds = st.slider("Number of job descriptions", min_value=2, max_value=6, value=3)
+    num_jds = st.slider("Number of job descriptions", min_value=2,
+                        max_value=MAX_BATCH_JDS, value=min(3, MAX_BATCH_JDS))
 
     jd_entries = []
     for i in range(num_jds):
@@ -261,6 +290,7 @@ with tab2:
             text  = st.text_area("Job description", height=150, key=f"jd_text_{i}",
                                   placeholder="Paste job description here...",
                                   label_visibility="collapsed")
+            text = _limit_text(text, f"Job {i + 1} description")
             jd_entries.append({"title": title or f"Job {i+1}", "text": text})
 
     batch_btn = st.button("📊  Run Batch Analysis", key="batch_run")
@@ -313,7 +343,7 @@ with tab2:
                 verdict = "Strong Match" if br["overall"] >= 70 else "Moderate" if br["overall"] >= 45 else "Weak Match"
 
                 st.markdown(f"""<div class='batch-row'>
-                    <div class='batch-title'>{medal} {br['title']} &nbsp;
+                    <div class='batch-title'>{medal} {html.escape(br['title'])} &nbsp;
                         <span style='color:{oc};font-size:1.1rem;font-weight:800;'>{br['overall']}%</span>
                         <span style='color:{oc};font-size:.75rem;margin-left:6px;'>{verdict}</span>
                     </div>
@@ -332,9 +362,9 @@ with tab2:
             bc1, bc2 = st.columns(2)
             with bc1:
                 st.markdown("**✅ Matched Skills**")
-                tags = " ".join([f"<span class='tag-matched'>{s}</span>" for s in best["matched_list"]])
+                tags = " ".join([f"<span class='tag-matched'>{html.escape(s)}</span>" for s in best["matched_list"]])
                 st.markdown(tags or "<span class='tag-missing'>None</span>", unsafe_allow_html=True)
             with bc2:
                 st.markdown("**❌ Missing Skills**")
-                tags = " ".join([f"<span class='tag-missing'>{s}</span>" for s in best["missing_list"]])
+                tags = " ".join([f"<span class='tag-missing'>{html.escape(s)}</span>" for s in best["missing_list"]])
                 st.markdown(tags or "<span class='tag-matched'>All covered!</span>", unsafe_allow_html=True)

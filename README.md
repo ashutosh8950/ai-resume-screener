@@ -22,10 +22,11 @@ An advanced resume-job description matcher using **TF-IDF**, **Word2Vec**, **key
 resume_screener/
 │
 ├── app.py            ← Streamlit UI (tabs: Single + Batch)
-├── analyzer.py       ← TF-IDF, keyword match, Word2Vec, GPT
-├── pdf_parser.py     ← PDF text extraction (PyPDF2)     ← NEW
-├── visualizer.py     ← Plotly charts (updated for v2)
-├── requirements.txt  ← All dependencies
+├── resume_screener/  ← Configuration, logging, analysis, parsing, skills, charts
+├── tests/            ← pytest regression tests
+├── requirements.txt  ← Runtime dependencies
+├── requirements-dev.txt ← Runtime dependencies plus pytest
+├── .env.example      ← Environment setting names and defaults
 └── README.md
 ```
 
@@ -34,15 +35,22 @@ resume_screener/
 ## 🛠️ Setup & Run
 
 ```bash
-# 1. Install dependencies
-pip install -r requirements.txt
+# 1. Install runtime and development dependencies
+python -m pip install -r requirements-dev.txt
 
-# 2. Run the app
-streamlit run app.py
+# 2. Run tests
+python -m pytest -q
 
-# 3. Open browser
-# http://localhost:8501
+# 3. Run locally
+streamlit run app.py --server.address 0.0.0.0 --server.port 8501
+# Open http://localhost:8501
+
+# Render start command (keep app.py in the project root)
+streamlit run app.py --server.address 0.0.0.0 --server.port $PORT
 ```
+
+Python 3.11.9 is declared in `runtime.txt` and `.python-version`. Runtime settings
+are read from environment variables; see `.env.example` for names and defaults.
 
 ---
 
@@ -58,13 +66,13 @@ streamlit run app.py
 - Checks fraction of JD keywords present in resume
 - Simulates how ATS systems scan resumes
 
-### 3. Word2Vec Semantic Similarity (30%) ← NEW
-- Trains `Word2Vec` on resume+JD as a small corpus
+### 3. Word2Vec Similarity (30%)
+- Trains `Word2Vec` on the current resume+JD pair; this is a lightweight heuristic, not a pretrained semantic model
 - Builds 100-dim vectors for each word
 - Averages word vectors → document vector
 - Cosine similarity between document vectors
 - **Advantage**: catches synonyms and semantic matches TF-IDF misses
-  - Example: "deep learning" ≈ "neural networks" ≈ "pytorch"
+  - Treat this score as experimental; it is not validated synonym detection
 
 ### Overall Score
 ```python

@@ -1,0 +1,1 @@
+"""Resume screening application logic."""
