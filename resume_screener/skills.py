@@ -14,6 +14,12 @@ TECH_SKILLS = [
     for category in SKILL_CATEGORIES.values()
     for entry in category
 ]
+TECHNICAL_SKILLS = [
+    entry["name"]
+    for category_name, category in SKILL_CATEGORIES.items()
+    if category_name != "soft_skills"
+    for entry in category
+]
 SKILL_ALIASES = {
     alias.lower(): entry["name"]
     for category in SKILL_CATEGORIES.values()
@@ -36,3 +42,8 @@ def extract_skills(text: str) -> list[str]:
         if _contains_skill(normalized, alias):
             found.add(canonical)
     return [skill for skill in TECH_SKILLS if skill in found]
+
+
+def extract_technical_skills(text: str) -> list[str]:
+    found = set(extract_skills(text))
+    return [skill for skill in TECHNICAL_SKILLS if skill in found]

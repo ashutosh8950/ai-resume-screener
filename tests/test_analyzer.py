@@ -2,8 +2,10 @@ from resume_screener import analyzer as analyzer_module, embeddings
 from resume_screener.analyzer import ResumeAnalyzer
 from resume_screener.config import (
     FALLBACK_KEYWORD_WEIGHT,
+    FALLBACK_SKILL_WEIGHT,
     FALLBACK_TFIDF_WEIGHT,
     KEYWORD_WEIGHT,
+    SKILL_WEIGHT,
     SEMANTIC_WEIGHT,
     TFIDF_WEIGHT,
 )
@@ -72,6 +74,21 @@ def test_text_preprocessing_preserves_accents_dashes_punctuation_and_repairs_lin
     assert "engineer linkedin" in cleaned
 
 
+def test_shared_normalizer_repairs_reported_pdf_and_paste_artifacts():
+    text = embeddings.normalize_text(
+        "Developer T ools | Python|Coding NinjasLink\n"
+        "Languages:Python\n–Built REST API with Django\n"
+        "Artificial Intelligence — Café. PyTorch FastAPI OpenCV MongoDB PostgreSQL MySQL GridFS"
+    )
+
+    assert "Developer Tools" in text
+    assert "Python\nCoding Ninjas Link" in text
+    assert "Languages: Python" in text
+    assert "Built REST API" in text
+    assert "Artificial Intelligence — Café." in text
+    assert "PyTorch FastAPI OpenCV MongoDB PostgreSQL MySQL GridFS" in text
+
+
 def test_job_description_filter_keeps_requirement_sections_and_reports_ignored_lines():
     requirements, ignored = embeddings.filter_job_description(
         """About Our Company:
@@ -88,8 +105,8 @@ Python, Django, PostgreSQL
     )
 
     assert requirements == [
-        "Build and maintain Django services for production teams.",
-        "Strong communication and problem solving skills.",
+        {"text": "Build and maintain Django services for production teams.", "optional": False},
+        {"text": "Strong communication and problem solving skills.", "optional": False},
     ]
     ignored_text = [item["line"] for item in ignored]
     assert "About Our Company:" in ignored_text
@@ -198,13 +215,32 @@ def test_skill_gate_marks_absent_framework_as_gap_even_with_high_cosine(monkeypa
     assert result["gaps"][0]["raw_score"] == 1.0
 
 
+def test_soft_skills_do_not_cap_present_git_github_requirement(monkeypatch):
+    class MockEmbeddingModel:
+        def embed(self, texts):
+            for _ in texts:
+                yield [1.0, 0.0]
+
+    monkeypatch.setattr(embeddings, "get_embedding_model", lambda: MockEmbeddingModel())
+    result = embeddings.match_requirements(
+        "Experience:\n• Used Git and GitHub to review and merge team code.",
+        "Requirements:\nUse Git and GitHub for team collaboration and code review.",
+    )
+
+    assert len(result["strong_matches"]) == 1
+    assert result["strong_matches"][0]["missing_skills"] == []
+
+
 def test_similarity_thresholds_group_strong_partial_and_gap():
     from resume_screener.config import PARTIAL_MATCH_THRESHOLD, STRONG_MATCH_THRESHOLD
 
     assert embeddings.classify_similarity(STRONG_MATCH_THRESHOLD) == "Strong"
     assert embeddings.classify_similarity(PARTIAL_MATCH_THRESHOLD) == "Partial"
     assert embeddings.classify_similarity(PARTIAL_MATCH_THRESHOLD - 0.01) == "Gap"
-    assert embeddings.rescale_similarity(PARTIAL_MATCH_THRESHOLD - 0.01) == 0.0
+    assert embeddings.coverage_credit(PARTIAL_MATCH_THRESHOLD - 0.01, "Gap") == 0.0
+    assert embeddings.coverage_credit(PARTIAL_MATCH_THRESHOLD, "Partial") == 0.40
+    assert embeddings.coverage_credit(STRONG_MATCH_THRESHOLD, "Strong") == 0.80
+    assert embeddings.coverage_credit(STRONG_MATCH_THRESHOLD + 0.15, "Strong") == 1.0
 
 
 def test_partial_cosine_is_shown_in_partial_group(monkeypatch):
@@ -243,7 +279,8 @@ def test_analyze_disabled_embeddings_uses_fallback_weights(monkeypatch):
     assert results["tfidf_score"] > 0
     assert results["keyword_score"] > 0
     assert results["overall_score"] == round(
-        results["tfidf_score"] * FALLBACK_TFIDF_WEIGHT
+        results["skill_coverage"] * FALLBACK_SKILL_WEIGHT
+        + results["tfidf_score"] * FALLBACK_TFIDF_WEIGHT
         + results["keyword_score"] * FALLBACK_KEYWORD_WEIGHT,
         4,
     )
@@ -253,7 +290,7 @@ def test_analyze_disabled_embeddings_uses_fallback_weights(monkeypatch):
 
 
 def test_analyze_embedding_failure_falls_back_cleanly(monkeypatch):
-    def fail_matching(_resume, _jd):
+    def fail_matching(_resume, _jd, **_kwargs):
         raise RuntimeError("model unavailable")
 
     monkeypatch.setattr(analyzer_module, "EMBEDDINGS_ENABLED", True)
@@ -263,7 +300,8 @@ def test_analyze_embedding_failure_falls_back_cleanly(monkeypatch):
     )
 
     assert results["overall_score"] == round(
-        results["tfidf_score"] * FALLBACK_TFIDF_WEIGHT
+        results["skill_coverage"] * FALLBACK_SKILL_WEIGHT
+        + results["tfidf_score"] * FALLBACK_TFIDF_WEIGHT
         + results["keyword_score"] * FALLBACK_KEYWORD_WEIGHT,
         4,
     )
@@ -292,6 +330,7 @@ def test_analyze_uses_configured_embedding_weights(monkeypatch):
 
     assert results["overall_score"] == round(
         0.6 * SEMANTIC_WEIGHT
+        + results["skill_coverage"] * SKILL_WEIGHT
         + results["keyword_score"] * KEYWORD_WEIGHT
         + results["tfidf_score"] * TFIDF_WEIGHT,
         4,

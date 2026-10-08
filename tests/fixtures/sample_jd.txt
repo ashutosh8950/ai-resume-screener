@@ -1,0 +1,19 @@
+Junior Full-Stack Developer
+ABOUT THE COMPANY
+We build collaborative software for growing businesses.
+RESPONSIBILITIES
+Build and maintain full-stack features for customer-facing web applications.
+Collaborate with designers and engineers to deliver reliable software.
+REQUIRED QUALIFICATIONS
+Develop production applications using Django and React.
+Administer Linux systems and troubleshoot common server issues.
+Use PostgreSQL or MySQL databases for application data.
+Deploy application workloads to AWS, Azure, or GCP.
+Use Git and GitHub for source control and team collaboration.
+Build Docker containers and maintain REST APIs.
+PREFERRED
+Experience with Kubernetes and cloud deployment tools.
+BENEFITS
+Health insurance, paid vacation, and retirement contributions.
+LOCATION: Remote within the United States.
+SALARY: Competitive annual compensation.

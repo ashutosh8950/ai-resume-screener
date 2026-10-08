@@ -1,0 +1,15 @@
+Jordan Lee
+Computer Engineering Student
+SUMMARY
+Computer Engineering student with hands-on experience building backend services and full-stack projects.
+TECHNICAL SKILLS
+Python, Flask, SQL, Docker, Git, GitHub, REST API, FastAPI, scikit-learn
+PROJECTS
+Campus Events API
+Built a REST API with FastAPI and Flask for event listings and registrations.
+Implemented SQL queries and validation for event records.
+Containerized the service with Docker and used GitHub for team code reviews.
+Machine Learning Classifier
+Trained a scikit-learn classifier in Python and evaluated its precision and recall.
+EDUCATION
+Bachelor of Engineering, Computer Engineering, 2022-2026

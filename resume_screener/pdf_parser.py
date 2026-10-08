@@ -6,7 +6,7 @@ import re
 from pypdf import PdfReader
 
 from resume_screener.config import MAX_PDF_PAGES, MAX_UPLOAD_MB
-from resume_screener.embeddings import clean_text
+from resume_screener.embeddings import normalize_text
 from resume_screener.logger import get_logger
 
 
@@ -65,7 +65,7 @@ class PDFParser:
         return page_count
 
     def _clean(self, text: str) -> str:
-        text = clean_text(text)
+        text = normalize_text(text)
         text = re.sub(r"(?<=\w)-\n(?=\w)", "-", text)
         text = re.sub(r"\n{3,}", "\n\n", text)
         text = re.sub(r"[\t\f\v ]+", " ", text)

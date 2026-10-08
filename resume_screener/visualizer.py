@@ -24,9 +24,9 @@ def _base(title=""):
 
 
 def _color(value):
-    if value >= 70:
+    if value >= 65:
         return GREEN
-    if value >= 45:
+    if value >= 40:
         return AMBER
     return RED
 
@@ -89,6 +89,7 @@ def plot_batch_chart(batch_results: list) -> go.Figure:
         ("TF-IDF", [result["tfidf"] for result in batch_results], ACCENT),
         ("Keywords", [result["kw"] for result in batch_results], PURPLE),
         ("Semantic", [result["semantic"] for result in batch_results], "#5de0d4"),
+        ("Skill coverage", [result["skill_coverage"] for result in batch_results], AMBER),
         ("Overall", [result["overall"] for result in batch_results], GREEN),
     ]
     fig = go.Figure()
@@ -133,9 +134,9 @@ def plot_score_gauge(score: int, label: str, color: str) -> go.Figure:
             bgcolor=SURFACE,
             borderwidth=0,
             steps=[
-                dict(range=[0, 45], color="#1a1a28"),
-                dict(range=[45, 70], color="#1e1e2e"),
-                dict(range=[70, 100], color="#1a2030"),
+                dict(range=[0, 40], color="#1a1a28"),
+                dict(range=[40, 65], color="#1e1e2e"),
+                dict(range=[65, 100], color="#1a2030"),
             ],
         ),
         title=dict(text=label, font=dict(color=TEXT_MUTED, size=11)),

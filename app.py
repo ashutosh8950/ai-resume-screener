@@ -13,6 +13,7 @@ import streamlit as st
 from resume_screener.analyzer import ResumeAnalyzer
 from resume_screener.config import (
     FALLBACK_KEYWORD_WEIGHT,
+    FALLBACK_SKILL_WEIGHT,
     FALLBACK_TFIDF_WEIGHT,
     KEYWORD_WEIGHT,
     MAX_BATCH_JDS,
@@ -20,6 +21,7 @@ from resume_screener.config import (
     MAX_UPLOAD_MB,
     OPENAI_API_KEY,
     SEMANTIC_WEIGHT,
+    SKILL_WEIGHT,
     TFIDF_WEIGHT,
 )
 from resume_screener.pdf_parser import PDFParseError, PDFParser
@@ -51,17 +53,42 @@ def _render_match_group(title: str, pairs: list[dict], empty_message: str) -> No
         st.caption(empty_message)
         return
 
-    for pair in pairs[:8]:
-        evidence = pair["evidence"] or "No eligible resume evidence"
-        section = f" · {pair['section']}" if pair["section"] else ""
-        st.text(f"cos {pair['raw_score']:.2f} · {pair['requirement']} → {evidence}{section}")
+    def render_table(rows: list[dict]) -> None:
+        rendered_rows = []
+        for pair in rows:
+            score = f"{pair['score']:.0%} coverage (cos {pair['raw_score']:.2f})"
+            if pair.get("optional"):
+                score += "<br><small>Optional · weight 0.5</small>"
+            if pair.get("status_reason"):
+                score += f"<br><small>{html.escape(pair['status_reason'])}</small>"
+            rendered_rows.append(
+                "<tr>"
+                f"<td>{html.escape(pair['requirement'])}</td>"
+                f"<td>{html.escape(pair['evidence'] or 'No eligible resume evidence')}</td>"
+                f"<td>{html.escape(pair['section'])}</td>"
+                f"<td>{score}</td>"
+                "</tr>"
+            )
+        table = """<style>
+        .match-table { width:100%; border-collapse:collapse; table-layout:fixed; }
+        .match-table th,.match-table td { padding:.55rem; border-bottom:1px solid #363642;
+          text-align:left; vertical-align:top; white-space:normal; overflow-wrap:anywhere; }
+        .match-table th { color:#c8c4f0; font-weight:650; }
+        .match-table td { color:#e7e5ef; }
+        .match-table th:nth-child(1),.match-table td:nth-child(1) { width:25%; }
+        .match-table th:nth-child(2),.match-table td:nth-child(2) { width:38%; }
+        .match-table th:nth-child(3),.match-table td:nth-child(3) { width:15%; }
+        .match-table th:nth-child(4),.match-table td:nth-child(4) { width:22%; }
+        </style><table class="match-table"><thead><tr>
+        <th>Requirement</th><th>Best evidence</th><th>Section</th><th>Score</th>
+        </tr></thead><tbody>""" + "".join(rendered_rows) + "</tbody></table>"
+        st.markdown(table, unsafe_allow_html=True)
+
+    render_table(pairs[:8])
 
     if len(pairs) > 8:
         with st.expander(f"Show {len(pairs) - 8} more {title.lower()} matches"):
-            for pair in pairs[8:]:
-                evidence = pair["evidence"] or "No eligible resume evidence"
-                section = f" · {pair['section']}" if pair["section"] else ""
-                st.text(f"cos {pair['raw_score']:.2f} · {pair['requirement']} → {evidence}{section}")
+            render_table(pairs[8:])
 
 st.set_page_config(page_title="AI Resume Screener v2", page_icon="📄", layout="wide")
 
@@ -110,13 +137,15 @@ with st.sidebar:
     st.markdown(f"""
 | Method | Weight |
 |---|---|
-| Semantic embeddings | {SEMANTIC_WEIGHT:.0%} |
-| Keyword match | {KEYWORD_WEIGHT:.0%} |
-| TF-IDF similarity | {TFIDF_WEIGHT:.0%} |
+| Semantic coverage | {SEMANTIC_WEIGHT:.0%} |
+| Technical skill coverage | {SKILL_WEIGHT:.0%} |
+| Keyword match | {KEYWORD_WEIGHT:.1%} |
+| TF-IDF similarity | {TFIDF_WEIGHT:.1%} |
     """)
     st.caption(
         "Fallback when embeddings are disabled or unavailable: "
-        f"Keyword {FALLBACK_KEYWORD_WEIGHT:.0%} + TF-IDF {FALLBACK_TFIDF_WEIGHT:.0%}."
+        f"Skill coverage {FALLBACK_SKILL_WEIGHT:.0%} + keyword {FALLBACK_KEYWORD_WEIGHT:.0%} "
+        f"+ TF-IDF {FALLBACK_TFIDF_WEIGHT:.0%}."
     )
     st.markdown("---")
     st.markdown("**New in v2:**")
@@ -185,19 +214,21 @@ with tab1:
             tfidf_pct   = int(results["tfidf_score"]   * 100)
             kw_pct      = int(results["keyword_score"] * 100)
             semantic_pct = int(results["semantic_score"] * 100)
+            skill_pct = int(results["skill_coverage"] * 100)
             overall_pct = int(results["overall_score"] * 100)
 
             def sc(p):
-                if p >= 70: return "#3ddfa0"
-                if p >= 45: return "#f5c842"
+                if p >= 65: return "#3ddfa0"
+                if p >= 40: return "#f5c842"
                 return "#ff6b6b"
 
-            c1, c2, c3, c4 = st.columns(4)
+            c1, c2, c3, c4, c5 = st.columns(5)
             for col, label, val, sub in [
                 (c1, "TF-IDF Similarity",   tfidf_pct,   "term importance"),
                 (c2, "Keyword Match",        kw_pct,      "ATS simulation"),
-                (c3, "Semantic Match",       semantic_pct, "requirement-level match"),
-                (c4, "Overall Score",        overall_pct, "weighted average"),
+                (c3, "Semantic Coverage",    semantic_pct, "requirement-level match"),
+                (c4, "Skill Coverage",       skill_pct, "technical skills present"),
+                (c5, "Overall Score",        overall_pct, "weighted average"),
             ]:
                 with col:
                     st.markdown(f"""<div class='score-box'>
@@ -207,10 +238,10 @@ with tab1:
                     </div>""", unsafe_allow_html=True)
 
             # Verdict
-            if overall_pct >= 70:
+            if overall_pct >= 65:
                 vs = "background:rgba(61,223,160,.12);border:1px solid rgba(61,223,160,.35);color:#3ddfa0;"
                 vt = "✅ Strong Match — great alignment with this role!"
-            elif overall_pct >= 45:
+            elif overall_pct >= 40:
                 vs = "background:rgba(245,200,66,.12);border:1px solid rgba(245,200,66,.35);color:#f5c842;"
                 vt = "⚠️ Moderate Match — a few gaps to address."
             else:
@@ -276,6 +307,7 @@ with tab1:
                     "tfidf_score":        round(results["tfidf_score"], 4),
                     "keyword_score":      round(results["keyword_score"], 4),
                     "semantic_score":     round(results["semantic_score"], 4),
+                    "skill_coverage":     round(results["skill_coverage"], 4),
                     "overall_score":      round(results["overall_score"], 4),
                     "resume_tokens":      results["resume_token_count"],
                     "filtered_jd_tokens": results["jd_token_count"],
@@ -285,6 +317,8 @@ with tab1:
                     "raw_match_scores":   results["raw_match_scores"],
                     "matched_skills":     len(results["matched_skills"]),
                     "missing_skills":     len(results["missing_skills"]),
+                    "required_technical_skills": results["required_technical_skills"],
+                    "missing_technical_skills": results["missing_technical_skills"],
                     "embeddings_used":    results["embeddings_used"],
                     "scoring_mode":       results["scoring_mode"],
                 })
@@ -354,6 +388,7 @@ with tab2:
                         "tfidf":   int(r["tfidf_score"]   * 100),
                         "kw":      int(r["keyword_score"] * 100),
                         "semantic": int(r["semantic_score"] * 100),
+                        "skill_coverage": int(r["skill_coverage"] * 100),
                         "matched": len(r["matched_skills"]),
                         "missing": len(r["missing_skills"]),
                         "matched_list": r["matched_skills"],
@@ -378,8 +413,8 @@ with tab2:
             # Detailed cards
             for rank, br in enumerate(batch_results):
                 medal = ["🥇", "🥈", "🥉"][rank] if rank < 3 else f"#{rank+1}"
-                oc    = "#3ddfa0" if br["overall"] >= 70 else "#f5c842" if br["overall"] >= 45 else "#ff6b6b"
-                verdict = "Strong Match" if br["overall"] >= 70 else "Moderate" if br["overall"] >= 45 else "Weak Match"
+                oc    = "#3ddfa0" if br["overall"] >= 65 else "#f5c842" if br["overall"] >= 40 else "#ff6b6b"
+                verdict = "Strong Match" if br["overall"] >= 65 else "Moderate" if br["overall"] >= 40 else "Weak Match"
 
                 st.markdown(f"""<div class='batch-row'>
                     <div class='batch-title'>{medal} {html.escape(br['title'])} &nbsp;
@@ -390,6 +425,7 @@ with tab2:
                         TF-IDF: <b style='color:#f0eeff'>{br['tfidf']}%</b> &nbsp;|&nbsp;
                         Keywords: <b style='color:#f0eeff'>{br['kw']}%</b> &nbsp;|&nbsp;
                         Semantic: <b style='color:#f0eeff'>{br['semantic']}%</b> &nbsp;|&nbsp;
+                        Skill coverage: <b style='color:#f0eeff'>{br['skill_coverage']}%</b> &nbsp;|&nbsp;
                         Matched skills: <b style='color:#3ddfa0'>{br['matched']}</b> &nbsp;|&nbsp;
                         Missing: <b style='color:#ff6b6b'>{br['missing']}</b>
                     </span>

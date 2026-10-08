@@ -59,30 +59,34 @@ Set `EMBEDDINGS_ENABLED=false` to use the keyword/TF-IDF fallback without loadin
 
 ## 🧠 How Scoring Works
 
-### Semantic Matching (40%)
+### Semantic Coverage (55%)
 - Splits job descriptions into requirement lines/sentences and resumes into evidence sentences/bullets
 - Embeds those snippets with `BAAI/bge-small-en-v1.5` through FastEmbed/ONNX on CPU
 - Matches each requirement to its best labeled resume evidence using cosine similarity
 - Uses raw cosine cutoffs of 0.5711 for Partial and 0.7068 for Strong; requirements naming only absent skills are Gaps
-- Rescales similarities below the partial cutoff to zero before averaging, so unrelated text contributes no semantic baseline
+- Converts each requirement to Gap `0`, Partial `0.40–0.70`, or Strong `0.80–1.00` coverage credit
+- Weights optional-section requirements at `0.5` in the semantic coverage mean
 
-### TF-IDF Similarity (30%)
+### Technical Skill Coverage (30%)
+- Matched required technical skills divided by all required technical skills
+- Soft skills do not cap semantic matches or count in this coverage denominator
+
+### Text Similarity (15%)
+- Keyword match and TF-IDF each contribute `7.5%`
 - `TfidfVectorizer(ngram_range=(1,2), sublinear_tf=True)`
-- Cosine similarity between resume and JD vectors
+- TF-IDF uses cosine similarity between resume and filtered JD requirement text
 - Captures term importance, not just frequency
-
-### Keyword Match (30%)
-- Tokenizes JD, removes stopwords
+- Keyword match tokenizes the filtered JD and removes stopwords
 - Checks fraction of JD keywords present in resume
 - Simulates how ATS systems scan resumes
 
 ### Overall Score
 ```python
 # With semantic embeddings:
-overall = semantic * 0.40 + keyword * 0.30 + tfidf * 0.30
+overall = semantic_coverage * 0.55 + skill_coverage * 0.30 + keyword * 0.075 + tfidf * 0.075
 
 # If embeddings are disabled or unavailable:
-overall = keyword * 0.50 + tfidf * 0.50
+overall = skill_coverage * 0.50 + keyword * 0.25 + tfidf * 0.25
 ```
 
 ---
@@ -111,7 +115,7 @@ Upload one resume, add up to 6 job descriptions, click **Run Batch Analysis**.
 
 Output:
 - Ranked table of jobs by match %
-- Grouped bar chart (Semantic / TF-IDF / Keywords / Overall per job)
+- Grouped bar chart (Semantic / Skill / TF-IDF / Keywords / Overall per job)
 - Deep-dive skill gap for the top match
 
 ---
