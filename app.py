@@ -58,13 +58,14 @@ def _render_match_group(title: str, pairs: list[dict], empty_message: str) -> No
     def render_table(rows: list[dict]) -> None:
         rendered_rows = []
         for pair in rows:
-            note = pair.get("status_reason", "")
+            note_parts = [pair.get("status_reason", ""), f"cosine {pair['raw_score']:.2f}"]
             if pair.get("optional"):
-                note = f"Optional · weight 0.5. {note}".strip()
+                note_parts.insert(0, "Optional · weight 0.5")
+            note = ". ".join(part.strip().rstrip(".") for part in note_parts if part.strip())
             rendered_rows.append(
                 {
                     "Requirement": pair["requirement"],
-                    "Score": f"{pair['status']} · {pair['score']:.0%} coverage · cosine {pair['raw_score']:.2f}",
+                    "Score": f"{pair['status']} · {pair['score']:.0%}",
                     "Section": pair["section"],
                     "Best evidence": pair["evidence"] or "No eligible resume evidence",
                     "Note": note,
@@ -81,7 +82,7 @@ def _render_match_group(title: str, pairs: list[dict], empty_message: str) -> No
             height=38 + 35 * len(frame),
             column_config={
                 "Requirement": st.column_config.TextColumn(width="large"),
-                "Score": st.column_config.TextColumn(width="medium"),
+                "Score": st.column_config.TextColumn(width=160),
                 "Section": st.column_config.TextColumn(width="medium"),
                 "Best evidence": st.column_config.TextColumn(width="large"),
                 "Note": st.column_config.TextColumn(width="large"),
@@ -264,6 +265,18 @@ with tab1:
                 _render_match_group("Strong", results["strong_matches"], "No strong matches.")
                 _render_match_group("Partial", results["partial_matches"], "No partial matches.")
                 _render_match_group("Gaps", results["gaps"], "No gaps detected.")
+                if results["general_expectations"]:
+                    with st.expander("General expectations (not scored as gaps)"):
+                        tips = (
+                            "Add a brief example that shows how you meet this expectation.",
+                            "Mention one relevant action and its outcome.",
+                            "Give a concise example from a project or role.",
+                        )
+                        for index, item in enumerate(results["general_expectations"]):
+                            st.markdown(
+                                f"- **{html.escape(item['requirement'])}**: "
+                                f"{tips[index % len(tips)]}"
+                            )
             else:
                 st.info("Requirement-level evidence is unavailable in fallback mode.")
 
@@ -305,16 +318,29 @@ with tab1:
             st.caption(f"Suggestions: {suggestion_source}")
             if suggestion_notice:
                 st.info(suggestion_notice)
+            section_titles = {
+                "missing_skills": "Missing Skills",
+                "partial_matches": "Partial Matches",
+                "gaps": "Gaps",
+                "ats_tips": "ATS Tips",
+            }
             for section, items in suggestion_data.items():
                 if not items:
                     continue
-                st.markdown(f"**{html.escape(section.replace('_', ' ').title())}**")
-                for item in items:
+                title = section_titles.get(section, section.replace("_", " ").title())
+                title = " ".join(
+                    word.upper() if word.upper() in {"ATS", "API", "SQL", "AWS"} else word
+                    for word in title.split()
+                )
+                st.markdown(f"**{html.escape(title)}**")
+                for index, item in enumerate(items):
                     if section == "missing_skills":
                         content = f"**{html.escape(item['skill'])}:** {html.escape(item['tip'])}"
                     elif section == "partial_matches":
+                        verbs = ("strengthen", "clarify", "make more specific")
+                        requirement = html.escape(item["requirement"].rstrip("."))
                         content = (
-                            f"**{html.escape(item['requirement'])}**; strengthen “{html.escape(item['evidence'])}” "
+                            f"**{requirement}**; {verbs[index % len(verbs)]} “{html.escape(item['evidence'])}” "
                             f"by adding {html.escape(item['suggestion'])}"
                         )
                     elif section == "gaps":

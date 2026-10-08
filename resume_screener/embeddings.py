@@ -551,6 +551,7 @@ def match_requirements(
             "strong_matches": [],
             "partial_matches": [],
             "gaps": [],
+            "general_expectations": [],
             "ignored_lines": ignored_lines,
             "requirements": [],
             "raw_match_scores": [],
@@ -591,11 +592,15 @@ def match_requirements(
             }
             for index, requirement in enumerate(requirement_texts)
         ]
+        general_expectations = [
+            pair for pair, skill_groups in zip(pairs, requirement_skill_groups) if not skill_groups
+        ]
         return {
             "semantic_score": 0.0,
             "strong_matches": [],
             "partial_matches": [],
-            "gaps": pairs,
+            "gaps": [pair for pair, skill_groups in zip(pairs, requirement_skill_groups) if skill_groups],
+            "general_expectations": general_expectations,
             "ignored_lines": ignored_lines,
             "requirements": requirement_records,
             "raw_match_scores": pairs,
@@ -609,6 +614,7 @@ def match_requirements(
     strong_matches = []
     partial_matches = []
     gaps = []
+    general_expectations = []
     raw_match_scores = []
     offset = 0
     coverage_credits = []
@@ -686,7 +692,9 @@ def match_requirements(
         raw_match_scores.append(pair)
         coverage_credits.append(scaled_score)
         coverage_weights.append(0.5 if requirement_records[index].get("optional") else 1.0)
-        if status == "Strong":
+        if not skill_groups:
+            general_expectations.append(pair)
+        elif status == "Strong":
             strong_matches.append(pair)
         elif status == "Partial":
             partial_matches.append(pair)
@@ -701,6 +709,7 @@ def match_requirements(
         "strong_matches": strong_matches,
         "partial_matches": partial_matches,
         "gaps": gaps,
+        "general_expectations": general_expectations,
         "ignored_lines": ignored_lines,
         "requirements": requirement_records,
         "raw_match_scores": raw_match_scores,

@@ -118,3 +118,17 @@ def test_key_is_never_exposed_in_suggestion_results_or_logs(monkeypatch, caplog)
 
 def test_timeout_constant_is_bounded():
     assert llm.REQUEST_TIMEOUT_SECONDS == 20
+
+
+def test_partial_suggestion_wording_varies_by_item():
+    analysis = {
+        "partial_matches": [
+            {"requirement": "Build services", "evidence": "Built services"},
+            {"requirement": "Deploy applications", "evidence": "Deployed applications"},
+        ],
+        "keyword_score": 1.0,
+    }
+
+    suggestions = suggestions_for_analysis(analysis)[0]["partial_matches"]
+
+    assert suggestions[0]["suggestion"] != suggestions[1]["suggestion"]

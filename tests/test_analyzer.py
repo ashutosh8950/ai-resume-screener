@@ -154,7 +154,7 @@ def test_skills_list_evidence_is_only_eligible_for_skill_requirements(monkeypatc
 
     evidence_by_requirement = {
         item["requirement"]: item
-        for item in result["strong_matches"]
+        for item in result["general_expectations"] + result["strong_matches"]
     }
     assert evidence_by_requirement[
         "Coordinate project timelines across delivery teams effectively."
@@ -189,9 +189,9 @@ def test_requirement_matching_uses_best_resume_evidence(monkeypatch):
     )
 
     assert abs(matched["semantic_score"] - (2 / 3)) < 1e-12
-    assert len(matched["strong_matches"]) == 2
+    assert len(matched["strong_matches"]) == 1
     assert matched["strong_matches"][0]["evidence"].startswith("Built Python APIs")
-    assert matched["strong_matches"][1]["evidence"].startswith("Designed cloud security")
+    assert matched["general_expectations"][0]["evidence"].startswith("Designed cloud security")
     assert matched["strong_matches"][0]["section"] == "Experience"
     assert len(matched["gaps"]) == 1
     assert matched["gaps"][0]["requirement"] == "Kubernetes deployment experience required."
@@ -245,7 +245,7 @@ def test_similarity_thresholds_group_strong_partial_and_gap():
     assert embeddings.coverage_credit(STRONG_MATCH_THRESHOLD + 0.15, "Strong") == 1.0
 
 
-def test_partial_cosine_is_shown_in_partial_group(monkeypatch):
+def test_partial_cosine_is_preserved_for_general_expectations(monkeypatch):
     class MockEmbeddingModel:
         def embed(self, texts):
             for text in texts:
@@ -261,7 +261,32 @@ def test_partial_cosine_is_shown_in_partial_group(monkeypatch):
     )
 
     assert result["strong_matches"] == []
-    assert len(result["partial_matches"]) == 1
+    assert result["partial_matches"] == []
+    assert len(result["general_expectations"]) == 1
+    assert result["general_expectations"][0]["status"] == "Partial"
+    assert result["general_expectations"][0]["score"] > 0
+
+
+def test_soft_and_cultural_requirements_are_not_scored_as_gaps(monkeypatch):
+    class MockEmbeddingModel:
+        def embed(self, texts):
+            for _ in texts:
+                yield [1.0, 0.0]
+
+    monkeypatch.setattr(embeddings, "get_embedding_model", lambda: MockEmbeddingModel())
+    requirements = [
+        "Continuously learn new technologies.",
+        "Work with senior developers.",
+        "We believe modern developers learn together.",
+    ]
+    result = embeddings.match_requirements(
+        "Experience:\nBuilt and maintained production services.",
+        "Requirements:\n" + "\n".join(f"- {line}" for line in requirements),
+    )
+
+    assert result["gaps"] == []
+    assert {item["requirement"] for item in result["general_expectations"]} == set(requirements)
+    assert result["semantic_score"] == 1.0
     assert result["gaps"] == []
 
 
@@ -321,6 +346,7 @@ def test_analyze_uses_configured_embedding_weights(monkeypatch):
             "strong_matches": [{"requirement": "Python", "evidence": "Python work", "score": 0.6}],
             "partial_matches": [],
             "gaps": [],
+            "general_expectations": [],
             "ignored_lines": ignored_lines or [],
             "requirements": requirements or [],
             "raw_match_scores": [],

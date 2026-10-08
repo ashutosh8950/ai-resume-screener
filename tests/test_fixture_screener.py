@@ -67,6 +67,30 @@ def test_fixture_analysis_gaps_missing_stacks_and_preserves_git_github(monkeypat
     assert postgresql_pair["status_reason"] == "SQL present, PostgreSQL/MySQL not found"
 
 
+def test_fixture_general_expectations_are_not_gaps_and_scores_are_unchanged(monkeypatch):
+    _use_mock_embeddings(monkeypatch)
+
+    result = ResumeAnalyzer().analyze(SAMPLE_RESUME, SAMPLE_JD)
+    expectation_text = " ".join(item["requirement"].lower() for item in result["general_expectations"])
+    gap_text = " ".join(item["requirement"].lower() for item in result["gaps"])
+    suggestions = build_rule_suggestions(result)
+    general_requirements = {
+        item["requirement"].lower() for item in result["general_expectations"]
+    }
+    gap_suggestion_requirements = {
+        item["requirement"].lower() for item in suggestions["gaps"]
+    }
+
+    assert "learning new technologies" in expectation_text
+    assert "learning new technologies" not in gap_text
+    assert not general_requirements.intersection(gap_suggestion_requirements)
+    assert result["semantic_score"] == pytest.approx(0.49523809523809526)
+    assert result["skill_coverage"] == pytest.approx(0.5454545454545454)
+    assert result["keyword_score"] == pytest.approx(0.21818181818181817)
+    assert result["tfidf_score"] == pytest.approx(0.07431279147973441)
+    assert result["overall_score"] == pytest.approx(0.458)
+
+
 def test_rule_suggestions_use_fixture_missing_partial_gap_and_low_keyword_sections(monkeypatch):
     _use_mock_embeddings(monkeypatch)
     analysis = ResumeAnalyzer().analyze(SAMPLE_RESUME, SAMPLE_JD)

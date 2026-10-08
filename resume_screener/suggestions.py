@@ -15,7 +15,12 @@ def build_rule_suggestions(analysis: dict) -> dict:
         analysis.get("missing_technical_skills") or analysis.get("missing_skills", [])
     ))[:5]
     partial_matches = []
-    for match in analysis.get("partial_matches", [])[:5]:
+    partial_phrases = (
+        "the relevant tool, your action, and the outcome",
+        "a concise example naming the tool and result",
+        "your contribution and measurable impact",
+    )
+    for index, match in enumerate(analysis.get("partial_matches", [])[:5]):
         requirement = match.get("requirement", "this requirement")
         missing_in_requirement = [
             skill for skill in missing_skills if skill.lower() in requirement.lower()
@@ -26,7 +31,7 @@ def build_rule_suggestions(analysis: dict) -> dict:
                 "including your contribution and outcome"
             )
         else:
-            addition = "the relevant tools, your specific action, and the resulting outcome"
+            addition = partial_phrases[index % len(partial_phrases)]
         partial_matches.append({
             "requirement": requirement,
             "evidence": match.get("evidence", "")[:240],

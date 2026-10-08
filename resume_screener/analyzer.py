@@ -74,6 +74,7 @@ class ResumeAnalyzer:
             "strong_matches": [],
             "partial_matches": [],
             "gaps": [],
+            "general_expectations": [],
             "ignored_lines": ignored_lines,
             "raw_match_scores": [],
         }
@@ -178,6 +179,7 @@ class ResumeAnalyzer:
             "strong_matches": match_result["strong_matches"],
             "partial_matches": match_result["partial_matches"],
             "gaps": match_result["gaps"],
+            "general_expectations": match_result.get("general_expectations", []),
             "ignored_lines": match_result["ignored_lines"],
             "raw_match_scores": match_result["raw_match_scores"],
             "scoring_mode": scoring_mode,
