@@ -136,21 +136,37 @@ class ResumeAnalyzer:
 
         resume_skills = set(extract_technical_skills(resume))
         jd_skills = self.extract_skills(filtered_jd)
+        required_skill_groups = []
+        seen_skill_groups = set()
+        for item in requirements:
+            if item.get("optional", False):
+                continue
+            groups = item.get("skill_groups") or embeddings.technical_skill_groups(item["text"])
+            for group in groups:
+                normalized_group = tuple(dict.fromkeys(group))
+                if normalized_group and normalized_group not in seen_skill_groups:
+                    seen_skill_groups.add(normalized_group)
+                    required_skill_groups.append(list(normalized_group))
         required_technical_skills = list(dict.fromkeys(
-            skill
-            for item in requirements
-            if not item.get("optional", False)
-            for skill in extract_technical_skills(item["text"])
+            skill for group in required_skill_groups for skill in group
         ))
-        matched_technical_skills = [
-            skill for skill in required_technical_skills if skill in resume_skills
-        ]
-        missing_technical_skills = [
-            skill for skill in required_technical_skills if skill not in resume_skills
-        ]
+        matched_technical_skills = list(dict.fromkeys(
+            skill
+            for group in required_skill_groups
+            if set(group).intersection(resume_skills)
+            for skill in group
+            if skill in resume_skills
+        ))
+        missing_technical_skills = list(dict.fromkeys(
+            skill
+            for group in required_skill_groups
+            if not set(group).intersection(resume_skills)
+            for skill in group
+        ))
         skill_coverage = (
-            len(matched_technical_skills) / len(required_technical_skills)
-            if required_technical_skills else 0.0
+            sum(bool(set(group).intersection(resume_skills)) for group in required_skill_groups)
+            / len(required_skill_groups)
+            if required_skill_groups else 0.0
         )
         if embeddings_used:
             overall = round(
@@ -182,6 +198,7 @@ class ResumeAnalyzer:
             "raw_jd_token_count": len(self.tokenize(jd)),
             "requirement_count": len(requirements),
             "required_technical_skills": required_technical_skills,
+                        "required_technical_skill_groups": required_skill_groups,
             "matched_technical_skills": matched_technical_skills,
             "missing_technical_skills": missing_technical_skills,
             "soft_skills_detected": [

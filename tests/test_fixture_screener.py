@@ -83,6 +83,72 @@ def test_fixture_has_complete_skill_line_requirements_and_separate_resume_entrie
     assert "0.99 ROC-AUC." in metric_units[0]["text"]
     assert any("Implemented SQL queries" in item["text"] for item in segments)
     assert "0.99 ROC-AUC." not in {item["section"] for item in segments}
+    assert all("9999999999" not in item["text"] for item in segments)
+    assert all("gmail.com" not in item["text"].lower() for item in segments)
+
+
+def test_inline_about_and_seniority_lines_are_ignored_with_reasons():
+    requirements, ignored = embeddings.filter_job_description(SAMPLE_JD)
+    ignored_by_line = {item["line"]: item["reason"] for item in ignored}
+
+    assert ignored_by_line[
+        "About Us: Fossaro is the dedicated back-office partner for growing education companies."
+    ] == "about us section"
+    assert ignored_by_line[
+        "As the operational backbone of Bounce Teachers, we coordinate administration and support."
+    ] == "about us section"
+    assert ignored_by_line["Experience: 0 to 2 years"] == "seniority information"
+    assert all("bounce teachers" not in item["text"].lower() for item in requirements)
+
+
+def test_skill_alternatives_and_example_tools_remain_grouped(monkeypatch):
+    _use_mock_embeddings(monkeypatch)
+    requirements, _ = embeddings.filter_job_description(SAMPLE_JD)
+    postgres_requirements = [
+        item for item in requirements
+        if "postgresql" in item["text"].lower() or "mysql" in item["text"].lower()
+    ]
+    cloud_requirements = [
+        item for item in requirements
+        if "exposure to aws" in item["text"].lower()
+    ]
+    ai_tool_requirements = [
+        item for item in requirements
+        if "ai coding tools" in item["text"].lower()
+    ]
+
+    assert len(postgres_requirements) == 1
+    assert postgres_requirements[0]["skill_groups"] == [["postgresql", "mysql"]]
+    assert len(cloud_requirements) == 1
+    assert cloud_requirements[0]["skill_groups"] == [["aws", "azure", "gcp"]]
+    assert len(ai_tool_requirements) == 1
+    assert ai_tool_requirements[0]["optional"] is True
+    assert ai_tool_requirements[0]["examples"] == ["github copilot", "cursor", "claude", "chatgpt"]
+
+    analysis = ResumeAnalyzer().analyze(SAMPLE_RESUME, SAMPLE_JD)
+    assert not any(
+        skill in analysis["required_technical_skills"]
+        for skill in ai_tool_requirements[0]["examples"]
+    )
+    example_pair = next(
+        pair for pair in analysis["raw_match_scores"]
+        if "ai coding tools" in pair["requirement"].lower()
+    )
+    assert example_pair["status_reason"] == "examples: github copilot, cursor, claude, chatgpt"
+
+
+def test_any_cloud_skill_satisfies_one_cloud_requirement(monkeypatch):
+    _use_mock_embeddings(monkeypatch)
+    resume = "TECHNICAL SKILLS\nDocker, Python\nPROJECTS\nBuilt Docker images for deployments."
+    jd = "REQUIREMENTS\nExposure to AWS, Azure, or Google Cloud."
+
+    result = ResumeAnalyzer().analyze(resume, jd)
+
+    assert result["requirement_count"] == 1
+    assert result["required_technical_skill_groups"] == [["aws", "azure", "gcp"]]
+    assert result["skill_coverage"] == 0.0
+    assert len(result["gaps"]) == 1
+    assert result["missing_skills"] == ["aws", "azure", "gcp"]
 
 
 def test_optional_requirement_has_half_weight_in_semantic_coverage(monkeypatch):
@@ -102,11 +168,11 @@ def test_short_skill_lines_are_kept_even_without_requirement_cues():
     )
 
     assert [item["text"] for item in requirements] == [
-        "Linux", "PostgreSQL", "MySQL", "AWS", "Azure", "GCP", "React", "Docker"
+        "Linux", "PostgreSQL/MySQL", "AWS/Azure/GCP", "React", "Docker"
     ]
-    assert [item["optional"] for item in requirements] == [
-        False, False, False, False, False, False, True, True
-    ]
+    assert [item["optional"] for item in requirements] == [False, False, False, True, True]
+    assert requirements[1]["skill_groups"] == [["postgresql", "mysql"]]
+    assert requirements[2]["skill_groups"] == [["aws", "azure", "gcp"]]
     assert ignored == [
         {"line": "Preferred", "reason": "section heading"},
         {"line": "Good to have", "reason": "section heading"},
@@ -156,6 +222,25 @@ def test_normalize_repairs_all_reported_text_artifacts():
     assert "PyPDF2 pypdf ChatGPT GitHub Copilot GPT-3.5 scikit-learn Scikit-learn" in normalized
     assert "I am an A student" in normalized
     assert all(char not in normalized for char in ("\ue000", "\ufffd", "\u200b", "\x01", "\u25af"))
+
+
+def test_normalize_keeps_product_casing_and_only_splits_known_pdf_labels():
+    products = (
+        "EasyOCR PyMuPDF PyMongo NumPy spaCy GridFS ShieldAI StandardScaler OpenAI "
+        "TensorFlow PyTorch scikit-learn FastAPI JavaScript TypeScript MySQL PostgreSQL "
+        "MongoDB SQLite"
+    )
+    normalized_products = embeddings.normalize_text(products)
+    assert normalized_products == products
+
+    assert embeddings.normalize_text("NinjasLink EngineerLinkedIn") == "Ninjas Link Engineer LinkedIn"
+
+
+def test_normalize_preserves_numeric_pipe_but_splits_text_pipe():
+    numeric_line = "Class X — 82.2% 2021 | 2019"
+
+    assert embeddings.normalize_text(numeric_line) == numeric_line
+    assert embeddings.normalize_text("Python|Coding Ninjas") == "Python\nCoding Ninjas"
 
 
 def test_fixture_analyzer_score_uses_phase_3a_2_weights(monkeypatch):

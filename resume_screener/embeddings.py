@@ -2,8 +2,6 @@
 
 import re
 import unicodedata
-from itertools import product
-
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 
@@ -33,6 +31,9 @@ _EXPLICIT_EXCLUDED_LINE = re.compile(
     r"health insurance|retirement contributions|equal opportunity|remote within)\b",
     re.IGNORECASE,
 )
+_SENIORITY_LINE = re.compile(r"^\s*\d+\s*(?:to|[-–])\s*\d+\s+years?\b", re.IGNORECASE)
+_INLINE_HEADING = re.compile(r"^\s*([^:]{1,48}):\s*(.*)$")
+_EXAMPLE_LIST = re.compile(r"\b(?:such as|e\.g\.?|for example)\s+(.+)$", re.IGNORECASE)
 _REQUIREMENT_CUE = re.compile(
     r"\b(?:responsibilit(?:y|ies)|require(?:ment|ments|d|s)|qualif(?:ication|ications|ied)|"
     r"experience|proficien(?:t|cy)|knowledge|ability|skills?|must have|should have|"
@@ -99,8 +100,16 @@ _STRAY_INITIAL = re.compile(r"(?<!\S)([B-HJ-Z])\s+([a-z])")
 _CAMEL_CASE_EXCEPTIONS = {
     "linkedin", "github", "javascript", "typescript", "pytorch", "fastapi",
     "opencv", "mongodb", "postgresql", "mysql", "gridfs", "pypdf2", "pypdf",
-    "chatgpt", "githubcopilot", "gpt35", "scikitlearn",
+    "chatgpt", "githubcopilot", "gpt35", "scikitlearn", "easyocr", "pymupdf",
+    "pymongo", "numpy", "spacy", "shieldai", "standardscaler", "openai",
+    "tensorflow", "sqlite",
 }
+_LINK_LABEL_ARTIFACTS = {"link", "linkedin", "github", "portfolio", "coursera", "certificate", "remote"}
+_CAMEL_CASE_PRODUCT_NAME = re.compile(r"^[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]+)*[A-Z]{2,}$")
+_PLAIN_WORD_HEAD = re.compile(r"^[A-Z][a-z]+$")
+_NUMERIC_PIPE_SIDE = re.compile(
+    r"^(?:\d+(?:\.\d+)?%?|(?:19|20)\d{2}(?:\s*[-–]\s*(?:(?:19|20)?\d{2}))?)$"
+)
 for _skill_category in SKILL_CATEGORIES.values():
     for _skill_entry in _skill_category:
         for _skill_name in [_skill_entry["name"], *_skill_entry["aliases"]]:
@@ -110,24 +119,37 @@ for _skill_category in SKILL_CATEGORIES.values():
 
 
 def _split_camel_case(word: str) -> str:
-    lowered = word.lower()
-    protected_spans = []
-    for exception in _CAMEL_CASE_EXCEPTIONS:
-        if len(exception) < 3 and lowered != exception:
-            continue
-        start = lowered.find(exception)
-        while start >= 0:
-            protected_spans.append((start, start + len(exception)))
-            start = lowered.find(exception, start + len(exception))
+    trailing_match = re.search(r"[.,;:!?)]*$", word)
+    trailing = trailing_match.group(0) if trailing_match else ""
+    core = word[:-len(trailing)] if trailing else word
+    compact = re.sub(r"[^A-Za-z0-9+#]", "", core).lower()
+    if compact in _CAMEL_CASE_EXCEPTIONS or _CAMEL_CASE_PRODUCT_NAME.fullmatch(core):
+        return word
 
-    output = []
-    for index, char in enumerate(word):
-        if index and word[index - 1].islower() and char.isupper():
-            inside_exception = any(start < index < end for start, end in protected_spans)
-            if not inside_exception:
-                output.append(" ")
-        output.append(char)
-    return "".join(output)
+    for index, char in enumerate(core):
+        if (
+            index
+            and core[index - 1].islower()
+            and char.isupper()
+            and _PLAIN_WORD_HEAD.fullmatch(core[:index])
+            and core[index:].lower() in _LINK_LABEL_ARTIFACTS
+        ):
+            return f"{core[:index]} {core[index:]}{trailing}"
+    return word
+
+
+def _split_pipe_line(line: str) -> list[str]:
+    segments = []
+    start = 0
+    for match in re.finditer(r"\s*\|\s*", line):
+        left = line[start:match.start()].strip()
+        right = line[match.end():].strip()
+        if _NUMERIC_PIPE_SIDE.fullmatch(left) or _NUMERIC_PIPE_SIDE.fullmatch(right):
+            continue
+        segments.append(line[start:match.start()].strip())
+        start = match.end()
+    segments.append(line[start:].strip())
+    return [segment for segment in segments if segment]
 
 
 def normalize_text(text: str) -> str:
@@ -145,17 +167,17 @@ def normalize_text(text: str) -> str:
     lines = []
     for line in text.splitlines():
         line = _LINE_BULLET_PATTERN.sub("", line)
-        line = re.sub(r"\s*\|\s*", "\n", line)
-        for segment in line.splitlines():
-            if "://" not in segment:
-                segment = re.sub(r"^([ \t]*[\w /&().-]{1,40}:)(?=\S)", r"\1 ", segment)
-            segment = _STRAY_INITIAL.sub(r"\1\2", segment)
-            words = re.split(r"(\s+)", segment)
-            words = [
-                word if not word or word.isspace() else _split_camel_case(word)
-                for word in words
-            ]
-            lines.append("".join(words).strip())
+        for pipe_segment in _split_pipe_line(line):
+            for segment in pipe_segment.splitlines():
+                if "://" not in segment:
+                    segment = re.sub(r"^([ \t]*[\w /&().-]{1,40}:)(?=\S)", r"\1 ", segment)
+                segment = _STRAY_INITIAL.sub(r"\1\2", segment)
+                words = re.split(r"(\s+)", segment)
+                words = [
+                    word if not word or word.isspace() else _split_camel_case(word)
+                    for word in words
+                ]
+                lines.append("".join(words).strip())
     return "\n".join(line for line in lines if line)
 
 
@@ -195,7 +217,7 @@ def _is_heading(line: str) -> tuple[bool, str, bool]:
         if key in _POSITIVE_HEADINGS:
             return True, "requirements", False
         if key in _NEGATIVE_HEADINGS:
-            return True, "excluded", False
+            return True, "about_us" if key.startswith("about ") else "excluded", False
     heading_shape = line.strip().endswith(":") or stripped.isupper() or stripped.istitle()
     if (
         short_heading
@@ -206,37 +228,37 @@ def _is_heading(line: str) -> tuple[bool, str, bool]:
     return False, "", False
 
 
-def split_skill_alternatives(text: str) -> list[str]:
-    matches = list(_SKILL_TERM_PATTERN.finditer(text))
-    if len(matches) < 2:
-        return [text]
+def technical_skill_groups(text: str) -> list[list[str]]:
+    example_match = _EXAMPLE_LIST.search(text)
+    searchable_text = example_match.group(1) if example_match else text
+    matches = []
+    for match in _SKILL_TERM_PATTERN.finditer(searchable_text):
+        skills = extract_technical_skills(match.group(0))
+        if skills:
+            matches.append((match, skills[0]))
+    if not matches:
+        return []
+    if example_match:
+        return [list(dict.fromkeys(skill for _, skill in matches))]
 
-    clusters = []
-    current = [matches[0]]
-    for match in matches[1:]:
-        separator = text[current[-1].end():match.start()]
+    groups = []
+    current = [matches[0][1]]
+    previous_match = matches[0][0]
+    for match, skill in matches[1:]:
+        separator = searchable_text[previous_match.end():match.start()]
         if _ALTERNATIVE_SEPARATOR.fullmatch(separator):
-            current.append(match)
+            current.append(skill)
         else:
-            if len(current) > 1:
-                clusters.append(current)
-            current = [match]
-    if len(current) > 1:
-        clusters.append(current)
-    if not clusters:
-        return [text]
+            groups.append(list(dict.fromkeys(current)))
+            current = [skill]
+        previous_match = match
+    groups.append(list(dict.fromkeys(current)))
+    return groups
 
-    variants = []
-    for selected_matches in product(*clusters):
-        parts = []
-        cursor = 0
-        for cluster, selected in zip(clusters, selected_matches):
-            parts.append(text[cursor:cluster[0].start()])
-            parts.append(selected.group(0))
-            cursor = cluster[-1].end()
-        parts.append(text[cursor:])
-        variants.append(normalize_text("".join(parts)))
-    return list(dict.fromkeys(variants))
+
+def split_skill_alternatives(text: str) -> list[str]:
+    """Compatibility helper; alternatives stay together as one requirement."""
+    return [normalize_text(text)]
 
 
 def filter_job_description(job_description: str) -> tuple[list[dict], list[dict]]:
@@ -248,17 +270,56 @@ def filter_job_description(job_description: str) -> tuple[list[dict], list[dict]
         line = normalize_text(raw_line).strip()
         if not line:
             continue
+        inline_heading = _INLINE_HEADING.match(line)
+        if inline_heading:
+            heading_label = inline_heading.group(1).strip()
+            heading_text = inline_heading.group(2).strip()
+            heading_key = _heading_key(heading_label)
+            if heading_key in _NEGATIVE_HEADINGS or heading_key in {
+                "experience", "job title", "about", "about us", "salary", "employment type"
+            }:
+                section = "about_us" if heading_key.startswith("about") else "excluded"
+                optional_section = False
+                reason = "about us section" if section == "about_us" else "excluded inline heading"
+                if heading_key == "experience" and _SENIORITY_LINE.match(heading_text):
+                    reason = "seniority information"
+                elif _EXPLICIT_EXCLUDED_LINE.search(line):
+                    reason = "explicit benefits, salary, location, or schedule line"
+                ignored.append({"line": line, "reason": reason})
+                continue
+            if heading_key == "education":
+                section = "education"
+                optional_section = True
+                if heading_text:
+                    line = heading_text
+                else:
+                    ignored.append({"line": line, "reason": "section heading"})
+                    continue
+            elif heading_key in _POSITIVE_HEADINGS or heading_key in _OPTIONAL_HEADINGS:
+                section = "requirements"
+                optional_section = heading_key in _OPTIONAL_HEADINGS
+                if heading_text:
+                    line = heading_text
+                else:
+                    ignored.append({"line": line, "reason": "section heading"})
+                    continue
         is_heading, heading_kind, heading_optional = _is_heading(line)
         if is_heading:
             section = heading_kind
             optional_section = heading_optional
             ignored.append({"line": line, "reason": "section heading"})
             continue
+        if _SENIORITY_LINE.match(line):
+            ignored.append({"line": line, "reason": "seniority information"})
+            continue
         line_skills = extract_skills(line)
         if _EXPLICIT_EXCLUDED_LINE.search(line):
             ignored.append({"line": line, "reason": "explicit benefits, salary, location, or schedule line"})
             continue
-        if section == "excluded" and not line_skills:
+        if section == "about_us":
+            ignored.append({"line": line, "reason": "about us section"})
+            continue
+        if section == "excluded":
             ignored.append({"line": line, "reason": "non-requirement section"})
             continue
         if _word_count(line) < 4 and not line_skills and not optional_section:
@@ -272,15 +333,20 @@ def filter_job_description(job_description: str) -> tuple[list[dict], list[dict]
             ignored.append({"line": line, "reason": "not requirement-focused"})
             continue
         for sentence in split_sentences(line):
-            for part in split_skill_alternatives(sentence):
-                part_skills = extract_skills(part)
-                if _word_count(part) >= 4 or part_skills or optional_section:
-                    requirements.append({
-                        "text": part,
-                        "optional": optional_section or section == "education",
-                    })
-                else:
-                    ignored.append({"line": part, "reason": "sentence has fewer than four words"})
+            part = normalize_text(sentence)
+            part_skills = extract_skills(part)
+            example_match = _EXAMPLE_LIST.search(part)
+            is_optional = optional_section or section == "education" or bool(example_match)
+            if _word_count(part) >= 4 or part_skills or is_optional:
+                examples = technical_skill_groups(part)[0] if example_match and technical_skill_groups(part) else []
+                requirements.append({
+                    "text": part,
+                    "optional": is_optional,
+                    "skill_groups": technical_skill_groups(part),
+                    "examples": examples,
+                })
+            else:
+                ignored.append({"line": part, "reason": "sentence has fewer than four words"})
     return requirements, ignored
 
 
@@ -365,6 +431,7 @@ def segment_resume(resume: str) -> list[dict]:
     section = "Resume"
     skills_section = False
     certifications_section = False
+    section_started = False
     for raw_line in resume.splitlines():
         is_bullet = bool(re.match(
             rf"^\s*(?:[{re.escape(_BULLET_CHARS)}]|[-*+]\s+|\d{{1,2}}[.)]\s+)",
@@ -380,9 +447,13 @@ def segment_resume(resume: str) -> list[dict]:
                 heading_key = _heading_key(heading)
                 skills_section = inline_skills or heading_key in _SKILL_HEADINGS
                 certifications_section = inline_certifications or heading_key in _CERTIFICATION_HEADINGS
+                section_started = True
                 normalized_line = inline_content
                 if not normalized_line:
                     continue
+
+            if not section_started:
+                continue
 
             text = normalized_line.strip()
             if not text:
@@ -441,6 +512,19 @@ def classify_similarity(cosine: float) -> str:
     return "Gap"
 
 
+def _record_skill_groups(record: dict) -> list[list[str]]:
+    return record.get("skill_groups") or technical_skill_groups(record["text"])
+
+
+def _missing_group_skills(groups: list[list[str]], resume_skills: set[str]) -> list[str]:
+    return list(dict.fromkeys(
+        skill
+        for group in groups
+        if not set(group).intersection(resume_skills)
+        for skill in group
+    ))
+
+
 def match_requirements(
     resume: str,
     job_description: str,
@@ -456,6 +540,7 @@ def match_requirements(
         for item in requirements
     ]
     requirement_texts = [normalize_text(item["text"]) for item in requirement_records]
+    requirement_skill_groups = [_record_skill_groups(item) for item in requirement_records]
     evidence = segment_resume(resume)
     if not requirement_records:
         return {
@@ -470,15 +555,14 @@ def match_requirements(
 
     resume_skills = set(extract_technical_skills(resume))
     embedded_evidence = []
-    for requirement in requirement_texts:
-        requirement_skills = set(extract_technical_skills(requirement))
+    for requirement, skill_groups in zip(requirement_texts, requirement_skill_groups):
         certification_topic = bool(_CERTIFICATION_TOPIC.search(requirement))
         embedded_evidence.append([
             item for item in evidence
-            if (not item["skills_only"] or bool(requirement_skills))
+            if (not item["skills_only"] or bool(skill_groups))
             and (
                 not item.get("certifications_only", False)
-                or bool(requirement_skills)
+                or bool(skill_groups)
                 or certification_topic
             )
         ])
@@ -494,8 +578,13 @@ def match_requirements(
                 "raw_score": 0.0,
                 "status": "Gap",
                 "optional": requirement_records[index].get("optional", False),
-                "missing_skills": sorted(set(extract_technical_skills(requirement)) - resume_skills),
-                "status_reason": "No eligible resume evidence",
+                "missing_skills": _missing_group_skills(requirement_skill_groups[index], resume_skills),
+                "status_reason": (
+                    f"examples: {', '.join(requirement_records[index].get('examples', []))}"
+                    if requirement_records[index].get("examples")
+                    else "No eligible resume evidence"
+                ),
+                "examples": requirement_records[index].get("examples", []),
             }
             for index, requirement in enumerate(requirement_texts)
         ]
@@ -523,8 +612,10 @@ def match_requirements(
     coverage_weights = []
     for index, requirement in enumerate(requirement_texts):
         items = embedded_evidence[index]
-        requirement_skills = set(extract_technical_skills(requirement))
-        missing_skills = sorted(requirement_skills - resume_skills)
+        skill_groups = requirement_skill_groups[index]
+        missing_skills = _missing_group_skills(skill_groups, resume_skills)
+        matched_skill_groups = [group for group in skill_groups if set(group).intersection(resume_skills)]
+        examples = requirement_records[index].get("examples", [])
         if not items:
             pair = {
                 "requirement": requirement,
@@ -534,11 +625,14 @@ def match_requirements(
                 "raw_score": 0.0,
                 "status": "Gap",
                 "optional": requirement_records[index].get("optional", False),
-                "missing_skills": missing_skills,
+                "missing_skills": [] if requirement_records[index].get("optional") else missing_skills,
                 "status_reason": (
-                    f"{', '.join(missing_skills)} not found in resume"
+                    f"examples: {', '.join(examples)}"
+                    if examples
+                    else f"{', '.join(missing_skills)} not found in resume"
                     if missing_skills else "No eligible resume evidence"
                 ),
+                "examples": examples,
             }
             gaps.append(pair)
             raw_match_scores.append(pair)
@@ -553,7 +647,7 @@ def match_requirements(
         status = classify_similarity(raw_score)
         status_reason = ""
         generic_sql_mismatch = (
-            bool(requirement_skills.intersection({"postgresql", "mysql"}))
+            any(set(group).intersection({"postgresql", "mysql"}) for group in skill_groups)
             and "sql" in resume_skills
             and not resume_skills.intersection({"postgresql", "mysql"})
         )
@@ -562,7 +656,7 @@ def match_requirements(
                 if status == "Strong":
                     status = "Partial"
                 status_reason = "SQL present, PostgreSQL/MySQL not found"
-            elif not requirement_skills.intersection(resume_skills):
+            elif not matched_skill_groups:
                 status = "Gap"
                 status_reason = f"{', '.join(missing_skills)} not found in resume"
             else:
@@ -570,6 +664,8 @@ def match_requirements(
                 status_reason = f"Capped to Partial: {', '.join(missing_skills)} not found in resume"
         elif status == "Gap":
             status_reason = "Cosine below partial threshold"
+        if examples:
+            status_reason = f"examples: {', '.join(examples)}"
         scaled_score = coverage_credit(raw_score, status)
         best_evidence = items[best_index]
         pair = {
@@ -580,8 +676,9 @@ def match_requirements(
             "raw_score": round(raw_score, 4),
             "status": status,
             "optional": requirement_records[index].get("optional", False),
-            "missing_skills": missing_skills,
+            "missing_skills": [] if requirement_records[index].get("optional") else missing_skills,
             "status_reason": status_reason,
+            "examples": examples,
         }
         raw_match_scores.append(pair)
         coverage_credits.append(scaled_score)

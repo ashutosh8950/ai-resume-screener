@@ -1,5 +1,6 @@
 Jordan Lee
 Computer Engineering Student
+Ashutosh Gupta +91 9999999999 ashutosh@gmail.com LinkedIn.com/in/ashutosh
 SUMMARY
 Computer Engineering student with hands-on experience building backend services and full-stack projects.
 Languages: Python, SQL

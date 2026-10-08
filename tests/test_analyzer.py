@@ -105,16 +105,15 @@ Python, Django, PostgreSQL
     )
 
     assert requirements == [
-        {"text": "Build and maintain Django services for production teams.", "optional": False},
-        {"text": "Strong communication and problem solving skills.", "optional": False},
-        {"text": "Python", "optional": False},
-        {"text": "Django", "optional": False},
-        {"text": "PostgreSQL", "optional": False},
+        {"text": "Build and maintain Django services for production teams.", "optional": False,
+         "skill_groups": [["django"]], "examples": []},
+        {"text": "Strong communication and problem solving skills.", "optional": False,
+         "skill_groups": [], "examples": []},
     ]
     ignored_text = [item["line"] for item in ignored]
     assert "About Our Company:" in ignored_text
     assert "Health insurance and paid vacation days." in ignored_text
-    assert "Python, Django, PostgreSQL" not in ignored_text
+    assert "Python, Django, PostgreSQL" in ignored_text
 
 
 def test_resume_segmentation_labels_sections_and_excludes_headings():

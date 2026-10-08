@@ -63,26 +63,26 @@ def _render_match_group(title: str, pairs: list[dict], empty_message: str) -> No
             rendered_rows.append(
                 {
                     "Requirement": pair["requirement"],
-                    "Best evidence": pair["evidence"] or "No eligible resume evidence",
-                    "Section": pair["section"],
                     "Score": f"{pair['status']} · {pair['score']:.0%} coverage · cosine {pair['raw_score']:.2f}",
+                    "Section": pair["section"],
+                    "Best evidence": pair["evidence"] or "No eligible resume evidence",
                     "Note": note,
                 }
             )
         frame = pd.DataFrame(
             rendered_rows,
-            columns=["Requirement", "Best evidence", "Section", "Score", "Note"],
+            columns=["Requirement", "Score", "Section", "Best evidence", "Note"],
         )
         st.dataframe(
             frame,
             use_container_width=True,
             hide_index=True,
-            height=min(440, 48 + 42 * len(frame)),
+            height=38 + 35 * len(frame),
             column_config={
                 "Requirement": st.column_config.TextColumn(width="large"),
-                "Best evidence": st.column_config.TextColumn(width="large"),
+                "Score": st.column_config.TextColumn(width="small"),
                 "Section": st.column_config.TextColumn(width="medium"),
-                "Score": st.column_config.TextColumn(width="medium"),
+                "Best evidence": st.column_config.TextColumn(width="large"),
                 "Note": st.column_config.TextColumn(width="large"),
             },
         )
