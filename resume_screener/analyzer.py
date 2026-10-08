@@ -136,10 +136,12 @@ class ResumeAnalyzer:
 
         resume_skills = set(extract_technical_skills(resume))
         jd_skills = self.extract_skills(filtered_jd)
-        required_technical_text = "\n".join(
-            item["text"] for item in requirements if not item.get("optional", False)
-        )
-        required_technical_skills = extract_technical_skills(required_technical_text)
+        required_technical_skills = list(dict.fromkeys(
+            skill
+            for item in requirements
+            if not item.get("optional", False)
+            for skill in extract_technical_skills(item["text"])
+        ))
         matched_technical_skills = [
             skill for skill in required_technical_skills if skill in resume_skills
         ]

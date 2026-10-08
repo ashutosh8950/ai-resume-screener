@@ -41,6 +41,8 @@ def extract_skills(text: str) -> list[str]:
     for alias, canonical in SKILL_ALIASES.items():
         if _contains_skill(normalized, alias):
             found.add(canonical)
+    if _contains_skill(normalized, "github copilot"):
+        found.discard("github")
     return [skill for skill in TECH_SKILLS if skill in found]
 
 

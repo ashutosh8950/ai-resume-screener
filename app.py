@@ -8,6 +8,7 @@ Streamlit UI with three new features:
 
 import html
 
+import pandas as pd
 import streamlit as st
 
 from resume_screener.analyzer import ResumeAnalyzer
@@ -56,33 +57,35 @@ def _render_match_group(title: str, pairs: list[dict], empty_message: str) -> No
     def render_table(rows: list[dict]) -> None:
         rendered_rows = []
         for pair in rows:
-            score = f"{pair['score']:.0%} coverage (cos {pair['raw_score']:.2f})"
+            note = pair.get("status_reason", "")
             if pair.get("optional"):
-                score += "<br><small>Optional · weight 0.5</small>"
-            if pair.get("status_reason"):
-                score += f"<br><small>{html.escape(pair['status_reason'])}</small>"
+                note = f"Optional · weight 0.5. {note}".strip()
             rendered_rows.append(
-                "<tr>"
-                f"<td>{html.escape(pair['requirement'])}</td>"
-                f"<td>{html.escape(pair['evidence'] or 'No eligible resume evidence')}</td>"
-                f"<td>{html.escape(pair['section'])}</td>"
-                f"<td>{score}</td>"
-                "</tr>"
+                {
+                    "Requirement": pair["requirement"],
+                    "Best evidence": pair["evidence"] or "No eligible resume evidence",
+                    "Section": pair["section"],
+                    "Score": f"{pair['status']} · {pair['score']:.0%} coverage · cosine {pair['raw_score']:.2f}",
+                    "Note": note,
+                }
             )
-        table = """<style>
-        .match-table { width:100%; border-collapse:collapse; table-layout:fixed; }
-        .match-table th,.match-table td { padding:.55rem; border-bottom:1px solid #363642;
-          text-align:left; vertical-align:top; white-space:normal; overflow-wrap:anywhere; }
-        .match-table th { color:#c8c4f0; font-weight:650; }
-        .match-table td { color:#e7e5ef; }
-        .match-table th:nth-child(1),.match-table td:nth-child(1) { width:25%; }
-        .match-table th:nth-child(2),.match-table td:nth-child(2) { width:38%; }
-        .match-table th:nth-child(3),.match-table td:nth-child(3) { width:15%; }
-        .match-table th:nth-child(4),.match-table td:nth-child(4) { width:22%; }
-        </style><table class="match-table"><thead><tr>
-        <th>Requirement</th><th>Best evidence</th><th>Section</th><th>Score</th>
-        </tr></thead><tbody>""" + "".join(rendered_rows) + "</tbody></table>"
-        st.markdown(table, unsafe_allow_html=True)
+        frame = pd.DataFrame(
+            rendered_rows,
+            columns=["Requirement", "Best evidence", "Section", "Score", "Note"],
+        )
+        st.dataframe(
+            frame,
+            use_container_width=True,
+            hide_index=True,
+            height=min(440, 48 + 42 * len(frame)),
+            column_config={
+                "Requirement": st.column_config.TextColumn(width="large"),
+                "Best evidence": st.column_config.TextColumn(width="large"),
+                "Section": st.column_config.TextColumn(width="medium"),
+                "Score": st.column_config.TextColumn(width="medium"),
+                "Note": st.column_config.TextColumn(width="large"),
+            },
+        )
 
     render_table(pairs[:8])
 

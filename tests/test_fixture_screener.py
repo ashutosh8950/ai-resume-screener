@@ -34,9 +34,12 @@ def test_fixture_analysis_gaps_missing_stacks_and_preserves_git_github(monkeypat
         "django", "react", "linux", "postgresql", "mysql", "aws", "azure", "gcp"
     ))
     assert all(term in gap_text for term in (
-        "django", "react", "linux", "postgresql", "mysql", "aws", "azure", "gcp"
+        "django", "react", "linux", "aws", "azure", "google cloud"
     ))
     assert "git and github" in strong_text
+    assert all(skill in result["matched_skills"] for skill in (
+        "docker", "python", "git", "github", "sql"
+    ))
     assert "collaboration" in result["soft_skills_detected"]
     assert not any("collaboration" in pair["status_reason"].lower() for pair in result["strong_matches"])
 
@@ -54,7 +57,32 @@ def test_fixture_analysis_gaps_missing_stacks_and_preserves_git_github(monkeypat
     assert "competitive annual compensation" in ignored_text
     assert "benefits" in ignored_reasons
     assert "location" in ignored_reasons
-    assert "compensation" in ignored_reasons
+    assert "salary" in ignored_reasons
+
+    postgresql_pair = next(
+        pair for pair in result["raw_match_scores"]
+        if pair["requirement"].lower().startswith("postgresql")
+    )
+    assert postgresql_pair["status_reason"] == "SQL present, PostgreSQL/MySQL not found"
+
+
+def test_fixture_has_complete_skill_line_requirements_and_separate_resume_entries():
+    requirements, _ = embeddings.filter_job_description(SAMPLE_JD)
+    required_text = " ".join(item["text"].lower() for item in requirements)
+    segments = embeddings.segment_resume(SAMPLE_RESUME)
+    certification_units = [item for item in segments if item["section"] == "Certifications"]
+    metric_units = [item for item in segments if "0.99 ROC-AUC" in item["text"]]
+
+    assert all(skill in required_text for skill in (
+        "django", "postgresql", "mysql", "linux", "ubuntu", "docker", "aws", "azure", "google cloud", "github copilot"
+    ))
+    assert len(certification_units) == 2
+    assert len(metric_units) == 1
+    assert metric_units[0]["section"] == "PROJECTS"
+    assert "Built a REST API" in metric_units[0]["text"]
+    assert "0.99 ROC-AUC." in metric_units[0]["text"]
+    assert any("Implemented SQL queries" in item["text"] for item in segments)
+    assert "0.99 ROC-AUC." not in {item["section"] for item in segments}
 
 
 def test_optional_requirement_has_half_weight_in_semantic_coverage(monkeypatch):
@@ -74,12 +102,26 @@ def test_short_skill_lines_are_kept_even_without_requirement_cues():
     )
 
     assert [item["text"] for item in requirements] == [
-        "Linux", "PostgreSQL/MySQL", "AWS/Azure/GCP", "React", "Docker"
+        "Linux", "PostgreSQL", "MySQL", "AWS", "Azure", "GCP", "React", "Docker"
     ]
-    assert [item["optional"] for item in requirements] == [False, False, False, True, True]
+    assert [item["optional"] for item in requirements] == [
+        False, False, False, False, False, False, True, True
+    ]
     assert ignored == [
         {"line": "Preferred", "reason": "section heading"},
         {"line": "Good to have", "reason": "section heading"},
+    ]
+
+
+def test_jd_heading_with_sentence_period_does_not_change_section_state():
+    requirements, _ = embeddings.filter_job_description(
+        "REQUIREMENTS\nBuild and maintain Linux application services.\n"
+        "Education.\nAdminister Linux systems for production workloads."
+    )
+
+    assert [item["text"] for item in requirements] == [
+        "Build and maintain Linux application services.",
+        "Administer Linux systems for production workloads.",
     ]
 
 
@@ -99,7 +141,8 @@ def test_normalize_repairs_all_reported_text_artifacts():
         "Developer T ools | Python|Coding NinjasLink\nLanguages:Python\n"
         "\u2013Built REST API with Django\n"
         "Artificial\u00a0Intelligence \u2014 Caf\u00e9. PyTorch FastAPI OpenCV MongoDB "
-        "PostgreSQL MySQL GridFS JavaScript TypeScript LinkedIn GitHub\n"
+        "PostgreSQL MySQL GridFS JavaScript TypeScript LinkedIn GitHub PyPDF2 pypdf "
+        "ChatGPT GitHub Copilot GPT-3.5 scikit-learn Scikit-learn\n"
         "I am an A student \ue000\ufffd\u200b\x01\u25af"
     )
     normalized = embeddings.normalize_text(raw)
@@ -110,6 +153,7 @@ def test_normalize_repairs_all_reported_text_artifacts():
     assert "Built REST API" in normalized
     assert "Artificial Intelligence \u2014 Caf\u00e9." in normalized
     assert "PyTorch FastAPI OpenCV MongoDB PostgreSQL MySQL GridFS JavaScript TypeScript LinkedIn GitHub" in normalized
+    assert "PyPDF2 pypdf ChatGPT GitHub Copilot GPT-3.5 scikit-learn Scikit-learn" in normalized
     assert "I am an A student" in normalized
     assert all(char not in normalized for char in ("\ue000", "\ufffd", "\u200b", "\x01", "\u25af"))
 

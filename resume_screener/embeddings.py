@@ -2,6 +2,7 @@
 
 import re
 import unicodedata
+from itertools import product
 
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
@@ -26,55 +27,79 @@ _BULLET_CHARS = _LINE_BULLET_CHARS + _BOX_CHARS + "●‣⁃◆◇"
 _LINE_BULLET_PATTERN = re.compile(rf"^[ \t]*[{re.escape(_LINE_BULLET_CHARS)}][ \t]*")
 _SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?])\s+|\n+")
 _WORD_PATTERN = re.compile(r"[\w+#.]+", re.UNICODE)
-_EXCLUDED_LINE = re.compile(
-    r"\b(?:about (?:us|the company|our company)|who we are|company overview|our mission|our culture|"
-    r"benefits?|salary|compensation|pay range|location|relocation|"
-    r"working days?|working hours?|employment type|work schedule|holidays?|"
-    r"work model|schedule|full[- ]time|part[- ]time|contract role|internship|"
-    r"paid time off|vacation|health insurance|equal opportunity)\b",
+_EXPLICIT_EXCLUDED_LINE = re.compile(
+    r"\b(?:benefits?|salary|compensation|pay range|location|relocation|"
+    r"working days?|working hours?|work schedule|holidays?|paid time off|vacation|"
+    r"health insurance|retirement contributions|equal opportunity|remote within)\b",
     re.IGNORECASE,
 )
 _REQUIREMENT_CUE = re.compile(
     r"\b(?:responsibilit(?:y|ies)|require(?:ment|ments|d|s)|qualif(?:ication|ications|ied)|"
     r"experience|proficien(?:t|cy)|knowledge|ability|skills?|must have|should have|"
     r"develop|build|design|implement|maintain|deploy|manage|support|lead|create|"
-    r"bachelor|degree|years?)\b",
+    r"bachelor|degree|years?|interested|use|familiarity|exposure|understanding)\b",
     re.IGNORECASE,
 )
+_EDUCATION_CUE = re.compile(r"\b(?:bachelor|master|phd|degree|diploma|coursework|education)\b", re.IGNORECASE)
 _POSITIVE_HEADINGS = {
-    "responsibilities", "key responsibilities", "core responsibilities", "what you will do", "what you'll do",
-    "requirements", "job requirements", "minimum requirements", "qualifications",
-    "required qualifications", "minimum qualifications", "preferred qualifications",
-    "requirements and qualifications", "technical requirements", "skills", "technical skills",
-    "required skills", "required experience", "what you'll bring", "what you will bring",
-    "what we're looking for", "what we are looking for", "tools", "tools and technologies",
-    "technologies", "programming languages", "required technical skills", "preferred skills", "desired skills",
-    "must have", "nice to have", "your qualifications", "what we need",
+    "requirements", "key responsibilities", "responsibilities", "skills",
+    "other important skills", "technical skills", "qualifications", "what you will do",
+    "what we expect", "the candidate should be interested in", "required qualifications",
+    "minimum qualifications", "preferred qualifications", "required skills", "required experience",
+    "what you'll bring", "what you will bring", "what we're looking for", "what we are looking for",
+    "tools", "tools and technologies", "technologies", "programming languages",
+    "preferred skills", "desired skills", "must have", "nice to have", "good to have",
+    "your qualifications", "what we need",
 }
 _OPTIONAL_HEADINGS = {
-    "preferred", "preferred qualifications", "preferred skills", "nice to have",
-    "preferred experience", "good to have", "optional", "bonus skills",
-    "desired qualifications", "preferred nice to have",
+    "preferred", "preferred qualifications", "preferred skills", "preferred experience",
+    "nice to have", "good to have", "optional", "bonus skills", "desired qualifications",
 }
 _NEGATIVE_HEADINGS = {
-    "about", "about us", "about the company", "about our company", "about the role",
-    "company overview", "benefits", "perks", "compensation", "salary", "location",
+    "about us", "about the company", "about our company", "about the role", "job description",
+    "additional information", "benefits", "perks", "compensation", "salary", "location",
     "work location", "working hours", "work schedule", "employment type", "equal opportunity",
 }
 _RESUME_HEADINGS = {
     "summary", "professional summary", "profile", "objective", "experience",
     "professional experience", "work experience", "employment history", "work history",
-    "skills", "technical skills", "core competencies", "education", "projects",
-    "personal projects", "certifications", "licenses", "awards", "publications",
-    "volunteer experience", "languages", "references", "achievements",
-    "career highlights", "key skills", "technical competencies", "selected projects",
-    "relevant experience", "career objective", "professional development",
+    "skills", "technical skills", "core skills", "core competencies", "developer tools",
+    "frameworks", "databases", "languages", "technologies", "education", "projects", "project experience",
+    "personal projects", "certifications", "certification", "licenses", "awards", "publications",
+    "volunteer experience", "references", "achievements", "career highlights", "key skills",
+    "technical competencies", "selected projects", "relevant experience", "career objective",
+    "professional development", "coursework", "training",
 }
-_SKILL_HEADINGS = {"skills", "technical skills", "core competencies", "technologies", "tools"}
+_SKILL_HEADINGS = {
+    "skills", "technical skills", "core skills", "core competencies", "developer tools",
+    "frameworks", "databases", "languages", "technologies", "tools", "coursework",
+}
+_CERTIFICATION_HEADINGS = {"certifications", "certification", "licenses", "training"}
+_SKILL_TERMS = sorted({
+    entry["name"] for category in SKILL_CATEGORIES.values() for entry in category
+} | {
+    alias for category in SKILL_CATEGORIES.values() for entry in category for alias in entry["aliases"]
+}, key=len, reverse=True)
+_SKILL_TERM_PATTERN = re.compile(
+    r"(?<![A-Za-z0-9_])(?:" + "|".join(re.escape(term) for term in _SKILL_TERMS) + r")(?![A-Za-z0-9_])",
+    re.IGNORECASE,
+)
+_ALTERNATIVE_SEPARATOR = re.compile(r"\s*(?:,\s*(?:or\s*)?|/|\bor\b)\s*", re.IGNORECASE)
+_RESUME_LIST_PREFIX = re.compile(
+    r"^\s*(languages|developer tools|core skills|skills|technical skills|core competencies|"
+    r"frameworks|databases|coursework|tools|technologies|certifications|certification)\s*:\s*(.*)$",
+    re.IGNORECASE,
+)
+_METRIC_FRAGMENT = re.compile(r"^\d+(?:\.\d+)?\s+[A-Z][\w-]*(?:\s+[-\w-]+)*\.?$")
+_CERTIFICATION_TOPIC = re.compile(
+    r"\b(?:certification|certified|certificate|credential|coursework|training|learned|studied|course)\b",
+    re.IGNORECASE,
+)
 _STRAY_INITIAL = re.compile(r"(?<!\S)([B-HJ-Z])\s+([a-z])")
 _CAMEL_CASE_EXCEPTIONS = {
     "linkedin", "github", "javascript", "typescript", "pytorch", "fastapi",
-    "opencv", "mongodb", "postgresql", "mysql", "gridfs",
+    "opencv", "mongodb", "postgresql", "mysql", "gridfs", "pypdf2", "pypdf",
+    "chatgpt", "githubcopilot", "gpt35", "scikitlearn",
 }
 for _skill_category in SKILL_CATEGORIES.values():
     for _skill_entry in _skill_category:
@@ -155,24 +180,69 @@ def _word_count(line: str) -> int:
 def _is_heading(line: str) -> tuple[bool, str, bool]:
     stripped = normalize_text(line).strip().rstrip(":")
     key = _heading_key(stripped)
-    if key in _OPTIONAL_HEADINGS:
-        return True, "requirements", True
-    if key in _POSITIVE_HEADINGS:
-        return True, "requirements", False
-    if key in _NEGATIVE_HEADINGS:
-        return True, "excluded", False
-    if line.strip().endswith(":") or (stripped.isupper() and _word_count(stripped) <= 7):
-        return True, "excluded", False
-    title_case = stripped.istitle() and _word_count(stripped) <= 6
-    if title_case and re.match(r"^(about|benefits?|salary|location|compensation|employment)\b", key):
-        return True, "excluded", False
+    has_sentence_punctuation = bool(re.search(r"[.!?]$", line.strip()))
+    has_digits = any(char.isdigit() for char in stripped)
+    short_heading = (
+        _word_count(stripped) <= 8
+        and not has_sentence_punctuation
+        and not has_digits
+    )
+    if short_heading:
+        if key == "education":
+            return True, "education", True
+        if key in _OPTIONAL_HEADINGS:
+            return True, "requirements", True
+        if key in _POSITIVE_HEADINGS:
+            return True, "requirements", False
+        if key in _NEGATIVE_HEADINGS:
+            return True, "excluded", False
+    heading_shape = line.strip().endswith(":") or stripped.isupper() or stripped.istitle()
+    if (
+        short_heading
+        and heading_shape
+        and not extract_skills(stripped)
+    ):
+        return True, "unknown", False
     return False, "", False
 
 
-def filter_job_description(job_description: str) -> tuple[list[str], list[dict]]:
+def split_skill_alternatives(text: str) -> list[str]:
+    matches = list(_SKILL_TERM_PATTERN.finditer(text))
+    if len(matches) < 2:
+        return [text]
+
+    clusters = []
+    current = [matches[0]]
+    for match in matches[1:]:
+        separator = text[current[-1].end():match.start()]
+        if _ALTERNATIVE_SEPARATOR.fullmatch(separator):
+            current.append(match)
+        else:
+            if len(current) > 1:
+                clusters.append(current)
+            current = [match]
+    if len(current) > 1:
+        clusters.append(current)
+    if not clusters:
+        return [text]
+
+    variants = []
+    for selected_matches in product(*clusters):
+        parts = []
+        cursor = 0
+        for cluster, selected in zip(clusters, selected_matches):
+            parts.append(text[cursor:cluster[0].start()])
+            parts.append(selected.group(0))
+            cursor = cluster[-1].end()
+        parts.append(text[cursor:])
+        variants.append(normalize_text("".join(parts)))
+    return list(dict.fromkeys(variants))
+
+
+def filter_job_description(job_description: str) -> tuple[list[dict], list[dict]]:
     requirements = []
     ignored = []
-    section = None
+    section = "unknown"
     optional_section = False
     for raw_line in job_description.splitlines():
         line = normalize_text(raw_line).strip()
@@ -185,75 +255,156 @@ def filter_job_description(job_description: str) -> tuple[list[str], list[dict]]
             ignored.append({"line": line, "reason": "section heading"})
             continue
         line_skills = extract_skills(line)
-        if _EXCLUDED_LINE.search(line):
-            ignored.append({"line": line, "reason": "benefits, compensation, location, or schedule"})
+        if _EXPLICIT_EXCLUDED_LINE.search(line):
+            ignored.append({"line": line, "reason": "explicit benefits, salary, location, or schedule line"})
             continue
-        if section == "excluded":
+        if section == "excluded" and not line_skills:
             ignored.append({"line": line, "reason": "non-requirement section"})
             continue
         if _word_count(line) < 4 and not line_skills and not optional_section:
             ignored.append({"line": line, "reason": "fewer than four words"})
             continue
-        requirement_like = section == "requirements" or bool(_REQUIREMENT_CUE.search(line))
+        requirement_like = section in {"requirements", "education"} or bool(_REQUIREMENT_CUE.search(line))
         requirement_like = requirement_like or bool(line_skills) or optional_section
+        if section == "education":
+            requirement_like = bool(_EDUCATION_CUE.search(line)) or bool(line_skills)
         if not requirement_like:
             ignored.append({"line": line, "reason": "not requirement-focused"})
             continue
-        parts = split_sentences(line)
-        for part in parts:
-            part_skills = extract_skills(part)
-            if _word_count(part) >= 4 or part_skills or optional_section:
-                requirements.append({"text": part, "optional": optional_section})
-            else:
-                ignored.append({"line": part, "reason": "sentence has fewer than four words"})
+        for sentence in split_sentences(line):
+            for part in split_skill_alternatives(sentence):
+                part_skills = extract_skills(part)
+                if _word_count(part) >= 4 or part_skills or optional_section:
+                    requirements.append({
+                        "text": part,
+                        "optional": optional_section or section == "education",
+                    })
+                else:
+                    ignored.append({"line": part, "reason": "sentence has fewer than four words"})
     return requirements, ignored
 
 
-def _resume_heading(line: str) -> tuple[bool, str, bool]:
-    stripped = normalize_text(line).strip().rstrip(":")
-    key = _heading_key(stripped)
-    inline = re.match(r"^(technical skills|core competencies|skills)\s*:\s*(.+)$", stripped, re.IGNORECASE)
+def _is_clean_resume_heading(line: str) -> bool:
+    return (
+        _word_count(line) <= 6
+        and not any(char.isdigit() for char in line)
+        and not re.search(r"[.!?;,]", line)
+    )
+
+
+def _resume_heading(line: str) -> tuple[bool, str, bool, bool, str]:
+    normalized = normalize_text(line).strip()
+    inline = _RESUME_LIST_PREFIX.match(normalized)
     if inline:
-        return True, inline.group(1), True
-    if key in _RESUME_HEADINGS:
-        return True, stripped, key in _SKILL_HEADINGS
-    if stripped.isupper() and _word_count(stripped) <= 6 and not extract_skills(stripped):
-        return True, stripped, False
-    return False, "", False
+        section = inline.group(1).strip()
+        key = _heading_key(section)
+        return (
+            True,
+            section,
+            key in _SKILL_HEADINGS,
+            key in _CERTIFICATION_HEADINGS,
+            inline.group(2).strip(),
+        )
+
+    stripped = normalized.rstrip(":").strip()
+    key = _heading_key(stripped)
+    if key in _RESUME_HEADINGS and _is_clean_resume_heading(stripped):
+        return (
+            True,
+            stripped,
+            key in _SKILL_HEADINGS,
+            key in _CERTIFICATION_HEADINGS,
+            "",
+        )
+    return False, "", False, False, ""
+
+
+def _bounded_evidence_chunks(text: str, max_chars: int = 300) -> list[str]:
+    sentences = split_sentences(text) or [text.strip()]
+    chunks = []
+    current = ""
+    for sentence in sentences:
+        words = sentence.split()
+        fragments = []
+        fragment = ""
+        for word in words:
+            candidate = f"{fragment} {word}".strip()
+            if len(candidate) > max_chars and fragment:
+                fragments.append(fragment)
+                fragment = word
+            else:
+                fragment = candidate
+        if fragment:
+            fragments.append(fragment)
+        for fragment in fragments:
+            candidate = f"{current} {fragment}".strip()
+            if current and len(candidate) > max_chars:
+                chunks.append(current)
+                current = fragment
+            else:
+                current = candidate
+    if current:
+        chunks.append(current)
+    return chunks
+
+
+def _append_segment(segments: list[dict], text: str, section: str, skills_only: bool, certifications_only: bool) -> None:
+    for chunk in _bounded_evidence_chunks(text):
+        if not chunk:
+            continue
+        segments.append({
+            "text": chunk,
+            "section": section,
+            "skills_only": skills_only,
+            "certifications_only": certifications_only,
+        })
 
 
 def segment_resume(resume: str) -> list[dict]:
     segments = []
     section = "Resume"
     skills_section = False
+    certifications_section = False
     for raw_line in resume.splitlines():
-        is_bullet = bool(re.match(rf"^\s*(?:[{re.escape(_BULLET_CHARS)}]|[-*+]|\d+[.)])\s*", raw_line))
-        is_heading, heading, inline_skills = _resume_heading(raw_line)
-        if is_heading:
-            section = heading
-            skills_section = inline_skills or _heading_key(heading) in _SKILL_HEADINGS
-            inline = re.match(r"^(?:technical skills|core competencies|skills)\s*:\s*(.+)$", raw_line, re.IGNORECASE)
-            if inline:
-                raw_line = inline.group(1)
-                is_bullet = False
-            else:
-                continue
-        text = normalize_text(raw_line).strip()
-        if not text or _word_count(text) < 2:
-            if text and segments and not is_bullet:
-                segments[-1]["text"] += " " + text
+        is_bullet = bool(re.match(
+            rf"^\s*(?:[{re.escape(_BULLET_CHARS)}]|[-*+]\s+|\d{{1,2}}[.)]\s+)",
+            raw_line,
+        ))
+        normalized = normalize_text(raw_line).strip()
+        if not normalized:
             continue
-        unit = {"text": text, "section": section, "skills_only": skills_section}
-        if (
-            segments
-            and not is_bullet
-            and segments[-1]["section"] == section
-            and not skills_section
-            and (not re.search(r"[.!?;:]$", segments[-1]["text"]) or _word_count(text) <= 7)
-        ):
-            segments[-1]["text"] += " " + text
-        else:
-            segments.append(unit)
+        for line_index, normalized_line in enumerate(normalized.splitlines()):
+            is_heading, heading, inline_skills, inline_certifications, inline_content = _resume_heading(normalized_line)
+            if is_heading:
+                section = heading
+                heading_key = _heading_key(heading)
+                skills_section = inline_skills or heading_key in _SKILL_HEADINGS
+                certifications_section = inline_certifications or heading_key in _CERTIFICATION_HEADINGS
+                normalized_line = inline_content
+                if not normalized_line:
+                    continue
+
+            text = normalized_line.strip()
+            if not text:
+                continue
+            metric_fragment = bool(_METRIC_FRAGMENT.fullmatch(text))
+            can_merge = (
+                bool(segments)
+                and segments[-1]["section"] == section
+                and not is_bullet
+                and not skills_section
+                and not certifications_section
+                and (
+                    metric_fragment
+                    or not re.search(r"[.!?;:]$", segments[-1]["text"])
+                )
+            )
+            if can_merge and len(segments[-1]["text"]) + len(text) + 1 <= 300:
+                segments[-1]["text"] += " " + text
+            else:
+                _append_segment(segments, text, section, skills_section, certifications_section)
+            if line_index > 0:
+                is_bullet = False
     return segments
 
 
@@ -321,9 +472,15 @@ def match_requirements(
     embedded_evidence = []
     for requirement in requirement_texts:
         requirement_skills = set(extract_technical_skills(requirement))
+        certification_topic = bool(_CERTIFICATION_TOPIC.search(requirement))
         embedded_evidence.append([
             item for item in evidence
-            if not item["skills_only"] or bool(requirement_skills)
+            if (not item["skills_only"] or bool(requirement_skills))
+            and (
+                not item.get("certifications_only", False)
+                or bool(requirement_skills)
+                or certification_topic
+            )
         ])
     queries = [BGE_QUERY_PREFIX + requirement for requirement in requirement_texts]
     passages = [item["text"] for group in embedded_evidence for item in group]
@@ -362,7 +519,6 @@ def match_requirements(
     gaps = []
     raw_match_scores = []
     offset = 0
-    scaled_scores = []
     coverage_credits = []
     coverage_weights = []
     for index, requirement in enumerate(requirement_texts):
@@ -396,8 +552,17 @@ def match_requirements(
         raw_score = float(np.clip(row[best_index], 0.0, 1.0))
         status = classify_similarity(raw_score)
         status_reason = ""
+        generic_sql_mismatch = (
+            bool(requirement_skills.intersection({"postgresql", "mysql"}))
+            and "sql" in resume_skills
+            and not resume_skills.intersection({"postgresql", "mysql"})
+        )
         if missing_skills:
-            if not requirement_skills.intersection(resume_skills):
+            if generic_sql_mismatch:
+                if status == "Strong":
+                    status = "Partial"
+                status_reason = "SQL present, PostgreSQL/MySQL not found"
+            elif not requirement_skills.intersection(resume_skills):
                 status = "Gap"
                 status_reason = f"{', '.join(missing_skills)} not found in resume"
             else:
