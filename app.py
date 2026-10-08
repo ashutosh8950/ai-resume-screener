@@ -16,16 +16,17 @@ from resume_screener.config import (
     FALLBACK_KEYWORD_WEIGHT,
     FALLBACK_SKILL_WEIGHT,
     FALLBACK_TFIDF_WEIGHT,
+    GEMINI_API_KEY,
     KEYWORD_WEIGHT,
     MAX_BATCH_JDS,
     MAX_TEXT_CHARS,
     MAX_UPLOAD_MB,
-    OPENAI_API_KEY,
     SEMANTIC_WEIGHT,
     SKILL_WEIGHT,
     TFIDF_WEIGHT,
 )
 from resume_screener.pdf_parser import PDFParseError, PDFParser
+from resume_screener.suggestions import suggestions_for_analysis
 from resume_screener.visualizer import plot_batch_chart, plot_score_breakdown, plot_skill_chart
 
 
@@ -80,7 +81,7 @@ def _render_match_group(title: str, pairs: list[dict], empty_message: str) -> No
             height=38 + 35 * len(frame),
             column_config={
                 "Requirement": st.column_config.TextColumn(width="large"),
-                "Score": st.column_config.TextColumn(width="small"),
+                "Score": st.column_config.TextColumn(width="medium"),
                 "Section": st.column_config.TextColumn(width="medium"),
                 "Best evidence": st.column_config.TextColumn(width="large"),
                 "Note": st.column_config.TextColumn(width="large"),
@@ -134,7 +135,10 @@ div[data-testid="stExpander"]     { border:1px solid #2a2840!important; border-r
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("### ⚙️ Settings")
-    api_key = st.text_input("OpenAI API Key", type="password", placeholder="sk-...") or OPENAI_API_KEY
+    st.text_input(
+        "Gemini API key (optional, free)", type="password", key="gemini_api_key"
+    )
+    st.caption("If a key is provided, only the structured analysis summary is sent to Gemini, not the full resume or job description.")
     st.markdown("---")
     st.markdown("**Scoring weights:**")
     st.markdown(f"""
@@ -152,13 +156,13 @@ with st.sidebar:
     )
     st.markdown("---")
     st.markdown("**New in v2:**")
-    st.markdown("- 📎 PDF resume upload\n- 🧠 Semantic evidence and requirement gaps\n- 📊 Batch mode (1 vs many)")
+    st.markdown("- 🧠 Semantic embeddings and evidence tables\n- 📎 PDF resume upload\n- ✨ Optional Gemini suggestions\n- 📊 Batch mode (1 vs many)")
     st.markdown("---")
-    st.markdown("<p style='color:#5c5880;font-size:.78rem;'>Python · Sklearn · FastEmbed ONNX · pypdf · OpenAI · Streamlit</p>", unsafe_allow_html=True)
+    st.markdown("<p style='color:#5c5880;font-size:.78rem;'>Python · Scikit-learn · FastEmbed ONNX · pypdf · Gemini (optional) · Streamlit</p>", unsafe_allow_html=True)
 
 # ── Header ────────────────────────────────────────────────────────────────────
 st.markdown("## 📄 AI Resume Screener &nbsp; <span style='font-size:.75rem;background:#23233a;color:#9b96c9;padding:3px 10px;border-radius:20px;vertical-align:middle;'>v2</span>", unsafe_allow_html=True)
-st.markdown("<p style='color:#9b96c9;font-size:.88rem;margin-top:-.3rem;'>Semantic Match · TF-IDF · Keyword Match · GPT Suggestions · PDF Upload · Batch Mode</p>", unsafe_allow_html=True)
+st.markdown("<p style='color:#9b96c9;font-size:.88rem;margin-top:-.3rem;'>Semantic Match · Evidence Tables · TF-IDF · Keyword Match · Optional Gemini Suggestions · PDF Upload · Batch Mode</p>", unsafe_allow_html=True)
 st.divider()
 
 # ── Tabs ──────────────────────────────────────────────────────────────────────
@@ -293,16 +297,31 @@ with tab1:
                 tags = " ".join([f"<span class='tag-missing'>{html.escape(s)}</span>" for s in results["missing_skills"]])
                 st.markdown(tags or "<span class='tag-matched'>All covered!</span>", unsafe_allow_html=True)
 
-            # GPT suggestions
-            st.markdown("### 🤖 GPT Improvement Suggestions")
-            if api_key:
-                with st.spinner("Generating AI suggestions..."):
-                    suggestions = analyzer.get_gpt_suggestions(resume_text, jd_text, results, api_key)
-                st.markdown(f"""<div style='background:#13131a;border:1px solid #2a2840;border-radius:12px;
-                    padding:1.2rem;font-size:.86rem;line-height:1.85;color:#c8c4f0;
-                    white-space:pre-wrap;'>{html.escape(suggestions)}</div>""", unsafe_allow_html=True)
-            else:
-                st.info("💡 Add your OpenAI API key in the sidebar to get GPT-powered improvement suggestions.")
+            st.markdown("### Improvement Suggestions")
+            with st.spinner("Preparing improvement suggestions..."):
+                suggestion_data, suggestion_notice, suggestion_source = suggestions_for_analysis(
+                    results, st.session_state.get("gemini_api_key") or GEMINI_API_KEY
+                )
+            st.caption(f"Suggestions: {suggestion_source}")
+            if suggestion_notice:
+                st.info(suggestion_notice)
+            for section, items in suggestion_data.items():
+                if not items:
+                    continue
+                st.markdown(f"**{html.escape(section.replace('_', ' ').title())}**")
+                for item in items:
+                    if section == "missing_skills":
+                        content = f"**{html.escape(item['skill'])}:** {html.escape(item['tip'])}"
+                    elif section == "partial_matches":
+                        content = (
+                            f"**{html.escape(item['requirement'])}**; strengthen “{html.escape(item['evidence'])}” "
+                            f"by adding {html.escape(item['suggestion'])}"
+                        )
+                    elif section == "gaps":
+                        content = f"**{html.escape(item['requirement'])}:** {html.escape(item['suggestion'])}"
+                    else:
+                        content = html.escape(item)
+                    st.markdown(f"- {content}")
 
             # Raw data
             with st.expander("🔢 Raw scores & token stats"):

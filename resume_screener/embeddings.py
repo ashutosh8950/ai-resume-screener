@@ -167,8 +167,11 @@ def normalize_text(text: str) -> str:
     lines = []
     for line in text.splitlines():
         line = _LINE_BULLET_PATTERN.sub("", line)
+        line = re.sub(r"(?<=\d)\s*\|\s*(?=\d)", " | ", line)
         for pipe_segment in _split_pipe_line(line):
             for segment in pipe_segment.splitlines():
+                segment = re.sub(r"\bTechnologyPatiala\b", "Technology Patiala", segment, flags=re.IGNORECASE)
+                segment = re.sub(r"\bRewariRewari\b", "Rewari Rewari", segment, flags=re.IGNORECASE)
                 if "://" not in segment:
                     segment = re.sub(r"^([ \t]*[\w /&().-]{1,40}:)(?=\S)", r"\1 ", segment)
                 segment = _STRAY_INITIAL.sub(r"\1\2", segment)

@@ -1,6 +1,6 @@
 # 📄 AI Resume Screener v2
 
-An advanced resume-job description matcher using pretrained **FastEmbed semantic embeddings**, **TF-IDF**, **keyword similarity**, and optional **GPT-3.5** suggestions.
+An advanced resume-job description matcher using pretrained **FastEmbed semantic embeddings**, **evidence tables**, **TF-IDF**, **keyword similarity**, and optional **Gemini free-tier** suggestions with a rule-based fallback.
 
 ---
 
@@ -10,6 +10,8 @@ An advanced resume-job description matcher using pretrained **FastEmbed semantic
 |---|---|
 | **PDF Resume Upload** | `pypdf` — extract and preserve Unicode text from resume PDFs |
 | **Semantic requirement matching** | `fastembed` ONNX Runtime on CPU with `BAAI/bge-small-en-v1.5` |
+| **Evidence tables** | Best resume evidence for each requirement, with clear partial matches and gaps |
+| **Improvement suggestions** | Always-available rule-based advice; optional Gemini suggestions via a free API key |
 | **Batch Mode** | Compare 1 resume against up to 6 jobs at once |
 | **Evidence and gaps** | Best resume sentence for each strong JD requirement, plus unmatched requirements |
 | **4-score dashboard** | Semantic match + TF-IDF + Keywords + Overall |
@@ -123,13 +125,13 @@ Output:
 ## 📌 Resume Bullet Points (copy-paste ready)
 
 ```
-AI Resume Screener v2 | Python, Scikit-learn, FastEmbed, ONNX Runtime, pypdf, OpenAI, Streamlit, Plotly
+AI Resume Screener v2 | Python, Scikit-learn, FastEmbed, ONNX Runtime, pypdf, Gemini (optional), Streamlit, Plotly
 
 • Built a resume-job matcher combining pretrained semantic embeddings, TF-IDF, and keyword overlap.
 • Matched each job requirement to the strongest resume evidence using cosine similarity and surfaced gaps.
 • Added PDF resume parsing using pypdf with Unicode-preserving text cleanup.
 • Built a Batch Mode to rank one resume against up to 6 job descriptions simultaneously.
-• Integrated GPT-3.5 via prompt engineering to generate 5 personalized, actionable resume improvement tips.
+• Added structured rule-based improvement suggestions with optional Gemini free-tier enhancement; only analysis summaries are sent when enabled.
 • Visualized results using an interactive Streamlit dashboard with Plotly grouped bar and donut charts.
 ```
 

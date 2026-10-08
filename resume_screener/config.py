@@ -17,7 +17,8 @@ MAX_UPLOAD_MB = _positive_int("MAX_UPLOAD_MB", 5)
 MAX_PDF_PAGES = _positive_int("MAX_PDF_PAGES", 10)
 MAX_TEXT_CHARS = _positive_int("MAX_TEXT_CHARS", 20000)
 MAX_BATCH_JDS = max(2, _positive_int("MAX_BATCH_JDS", 6))
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 if LOG_LEVEL not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
     LOG_LEVEL = "INFO"

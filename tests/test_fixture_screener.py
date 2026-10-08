@@ -5,6 +5,7 @@ import pytest
 
 from resume_screener import analyzer as analyzer_module, embeddings
 from resume_screener.analyzer import ResumeAnalyzer
+from resume_screener.suggestions import build_rule_suggestions
 
 
 FIXTURE_DIR = Path(__file__).with_name("fixtures")
@@ -64,6 +65,24 @@ def test_fixture_analysis_gaps_missing_stacks_and_preserves_git_github(monkeypat
         if pair["requirement"].lower().startswith("postgresql")
     )
     assert postgresql_pair["status_reason"] == "SQL present, PostgreSQL/MySQL not found"
+
+
+def test_rule_suggestions_use_fixture_missing_partial_gap_and_low_keyword_sections(monkeypatch):
+    _use_mock_embeddings(monkeypatch)
+    analysis = ResumeAnalyzer().analyze(SAMPLE_RESUME, SAMPLE_JD)
+
+    suggestions = build_rule_suggestions(analysis)
+
+    assert suggestions["missing_skills"]
+    assert all(item["skill"] and item["tip"] for item in suggestions["missing_skills"])
+    assert suggestions["partial_matches"]
+    assert all(item["evidence"] and item["suggestion"] for item in suggestions["partial_matches"])
+    assert suggestions["gaps"]
+    assert suggestions["ats_tips"] == [
+        "Use standard headings such as Experience, Projects, Education, and Skills.",
+        "Include relevant job-description keywords in context within truthful evidence, not as an isolated list.",
+        "Quantify results with scale, time, reliability, users, or other meaningful measures.",
+    ]
 
 
 def test_fixture_has_complete_skill_line_requirements_and_separate_resume_entries():
@@ -241,6 +260,13 @@ def test_normalize_preserves_numeric_pipe_but_splits_text_pipe():
 
     assert embeddings.normalize_text(numeric_line) == numeric_line
     assert embeddings.normalize_text("Python|Coding Ninjas") == "Python\nCoding Ninjas"
+
+
+def test_normalize_repairs_named_spacing_artifacts_without_changing_products_or_skills():
+    assert embeddings.normalize_text("TechnologyPatiala RewariRewari 2021|2019") == (
+        "Technology Patiala Rewari Rewari 2021 | 2019"
+    )
+    assert embeddings.normalize_text("OpenAI GPT-3.5 ChatGPT") == "OpenAI GPT-3.5 ChatGPT"
 
 
 def test_fixture_analyzer_score_uses_phase_3a_2_weights(monkeypatch):

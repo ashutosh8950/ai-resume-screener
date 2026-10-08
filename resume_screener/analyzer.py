@@ -1,9 +1,6 @@
-"""Resume/job-description analysis and optional OpenAI suggestions."""
+"""Resume/job-description analysis."""
 
-import json
 import re
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
 
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
@@ -34,34 +31,6 @@ STOPWORDS = {
 TOKEN_PATTERN = re.compile(
     r"(?<![A-Za-z0-9_])(?:\.[A-Za-z0-9]+|[A-Za-z0-9]+(?:[+#-][A-Za-z0-9+#-]*|\.[A-Za-z0-9]+)*)(?![A-Za-z0-9_])"
 )
-
-class OpenAIClient:
-    """Small per-request REST client compatible with the pinned OpenAI SDK version."""
-
-    endpoint = "https://api.openai.com/v1/chat/completions"
-
-    def __init__(self, api_key: str):
-        self.api_key = api_key
-
-    def create_chat_completion(self, messages: list[dict], max_tokens: int, temperature: float) -> dict:
-        body = json.dumps({
-            "model": "gpt-3.5-turbo",
-            "messages": messages,
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-        }).encode("utf-8")
-        request = Request(
-            self.endpoint,
-            data=body,
-            headers={
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-            },
-            method="POST",
-        )
-        with urlopen(request, timeout=30) as response:
-            return json.loads(response.read().decode("utf-8"))
-
 
 class ResumeAnalyzer:
     def __init__(self):
@@ -214,45 +183,3 @@ class ResumeAnalyzer:
             "scoring_mode": scoring_mode,
         }
 
-    def get_gpt_suggestions(self, resume: str, jd: str, results: dict, api_key: str) -> str:
-        overall_pct = int(results["overall_score"] * 100)
-        matched = ", ".join(results["matched_skills"]) or "none detected"
-        missing = ", ".join(results["missing_skills"]) or "none"
-        prompt = f"""You are an expert resume coach helping a Computer Engineering student (2026 graduate) improve their resume.
-
-MATCH ANALYSIS:
-- Overall Score: {overall_pct}%
-- TF-IDF Similarity: {int(results['tfidf_score'] * 100)}%
-- Keyword Match: {int(results['keyword_score'] * 100)}%
-- Semantic Match Score: {int(results['semantic_score'] * 100)}%
-- Matched Skills: {matched}
-- Missing Skills: {missing}
-
-RESUME (truncated): {resume[:1000]}
-JOB DESCRIPTION (truncated): {jd[:800]}
-
-Give exactly 5 specific, actionable improvement suggestions numbered 1-5. Each 2-3 sentences. Be direct and practical."""
-        client = OpenAIClient(api_key)
-        try:
-            response = client.create_chat_completion(
-                messages=[
-                    {"role": "system", "content": "You are a professional resume coach. Be specific, direct, practical."},
-                    {"role": "user", "content": prompt},
-                ],
-                max_tokens=800,
-                temperature=0.7,
-            )
-            return response["choices"][0]["message"]["content"].strip()
-        except HTTPError as error:
-            logger.warning("OpenAI request returned HTTP %s", error.code)
-            if error.code == 401:
-                return "Invalid API key. Please check the key and try again."
-            if error.code == 429:
-                return "OpenAI rate limit reached. Please wait and try again."
-            return "OpenAI could not generate suggestions right now. Please try again later."
-        except (URLError, TimeoutError, KeyError, ValueError):
-            logger.exception("OpenAI suggestions request failed")
-            return "OpenAI could not generate suggestions right now. Please try again later."
-        except Exception:
-            logger.exception("Unexpected error while generating OpenAI suggestions")
-            return "OpenAI could not generate suggestions right now. Please try again later."
