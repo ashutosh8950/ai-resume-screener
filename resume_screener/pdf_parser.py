@@ -3,9 +3,10 @@
 import io
 import re
 
-import PyPDF2
+from pypdf import PdfReader
 
 from resume_screener.config import MAX_PDF_PAGES, MAX_UPLOAD_MB
+from resume_screener.embeddings import clean_text
 from resume_screener.logger import get_logger
 
 
@@ -30,7 +31,7 @@ class PDFParser:
             )
 
         try:
-            reader = PyPDF2.PdfReader(io.BytesIO(file_bytes))
+            reader = PdfReader(io.BytesIO(file_bytes))
             page_count = len(reader.pages)
             if page_count == 0:
                 raise PDFParseError("The PDF has no pages. Please choose a valid resume PDF.")
@@ -64,8 +65,8 @@ class PDFParser:
         return page_count
 
     def _clean(self, text: str) -> str:
-        text = re.sub(r"(\w+)-\n(\w+)", r"\1\2", text)
+        text = clean_text(text)
+        text = re.sub(r"(?<=\w)-\n(?=\w)", "-", text)
         text = re.sub(r"\n{3,}", "\n\n", text)
-        text = re.sub(r"[^\x20-\x7E\n]", " ", text)
-        text = re.sub(r"[ \t]{2,}", " ", text)
-        return text.strip()
+        text = re.sub(r"[\t\f\v ]+", " ", text)
+        return "\n".join(line.strip() for line in text.splitlines()).strip()

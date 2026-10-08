@@ -1,9 +1,9 @@
 """
 app.py  (v2 — upgraded)
 Streamlit UI with three new features:
-  1. PDF resume upload (PyPDF2)
+    1. PDF resume upload (pypdf)
     2. Pretrained semantic similarity score (FastEmbed ONNX)
-  3. Batch mode — 1 resume vs multiple JDs
+    3. Batch mode — 1 resume vs multiple JDs
 """
 
 import html
@@ -43,6 +43,25 @@ def _read_pdf(uploaded_file, label: str) -> tuple[str, int]:
         st.error(str(error))
         return "", 0
     return _limit_text(text, label), page_count
+
+
+def _render_match_group(title: str, pairs: list[dict], empty_message: str) -> None:
+    st.markdown(f"**{title} ({len(pairs)})**")
+    if not pairs:
+        st.caption(empty_message)
+        return
+
+    for pair in pairs[:8]:
+        evidence = pair["evidence"] or "No eligible resume evidence"
+        section = f" · {pair['section']}" if pair["section"] else ""
+        st.text(f"cos {pair['raw_score']:.2f} · {pair['requirement']} → {evidence}{section}")
+
+    if len(pairs) > 8:
+        with st.expander(f"Show {len(pairs) - 8} more {title.lower()} matches"):
+            for pair in pairs[8:]:
+                evidence = pair["evidence"] or "No eligible resume evidence"
+                section = f" · {pair['section']}" if pair["section"] else ""
+                st.text(f"cos {pair['raw_score']:.2f} · {pair['requirement']} → {evidence}{section}")
 
 st.set_page_config(page_title="AI Resume Screener v2", page_icon="📄", layout="wide")
 
@@ -103,7 +122,7 @@ with st.sidebar:
     st.markdown("**New in v2:**")
     st.markdown("- 📎 PDF resume upload\n- 🧠 Semantic evidence and requirement gaps\n- 📊 Batch mode (1 vs many)")
     st.markdown("---")
-    st.markdown("<p style='color:#5c5880;font-size:.78rem;'>Python · Sklearn · FastEmbed ONNX · PyPDF2 · OpenAI · Streamlit</p>", unsafe_allow_html=True)
+    st.markdown("<p style='color:#5c5880;font-size:.78rem;'>Python · Sklearn · FastEmbed ONNX · pypdf · OpenAI · Streamlit</p>", unsafe_allow_html=True)
 
 # ── Header ────────────────────────────────────────────────────────────────────
 st.markdown("## 📄 AI Resume Screener &nbsp; <span style='font-size:.75rem;background:#23233a;color:#9b96c9;padding:3px 10px;border-radius:20px;vertical-align:middle;'>v2</span>", unsafe_allow_html=True)
@@ -203,24 +222,17 @@ with tab1:
                 st.info(results["embedding_message"])
 
             st.markdown("### Why this score")
-            if results["matched_pairs"]:
-                for pair in results["matched_pairs"]:
-                    st.markdown(f"**Strong match · {pair['score']:.0%}**")
-                    st.write("JD requirement:", pair["requirement"])
-                    st.write("Resume evidence:", pair["evidence"])
-            elif results["embeddings_used"]:
-                st.write("No JD requirements reached the strong-match threshold.")
+            if results["embeddings_used"]:
+                _render_match_group("Strong", results["strong_matches"], "No strong matches.")
+                _render_match_group("Partial", results["partial_matches"], "No partial matches.")
+                _render_match_group("Gaps", results["gaps"], "No gaps detected.")
             else:
-                st.write("Requirement-level evidence is unavailable in fallback mode.")
+                st.info("Requirement-level evidence is unavailable in fallback mode.")
 
-            st.markdown("**Gaps**")
-            if results["gaps"]:
-                for gap in results["gaps"]:
-                    st.write(f"{gap['score']:.0%} match:", gap["requirement"])
-            elif results["embeddings_used"]:
-                st.write("No unmatched requirements detected.")
-            else:
-                st.write("Gap analysis requires semantic embeddings.")
+            if results["ignored_lines"]:
+                with st.expander(f"Ignored lines ({len(results['ignored_lines'])})"):
+                    for ignored in results["ignored_lines"]:
+                        st.text(f"{ignored['line']} · {ignored['reason']}")
 
             # Charts
             ch1, ch2 = st.columns(2)
@@ -266,7 +278,11 @@ with tab1:
                     "semantic_score":     round(results["semantic_score"], 4),
                     "overall_score":      round(results["overall_score"], 4),
                     "resume_tokens":      results["resume_token_count"],
-                    "jd_tokens":          results["jd_token_count"],
+                    "filtered_jd_tokens": results["jd_token_count"],
+                    "raw_jd_tokens":      results["raw_jd_token_count"],
+                    "filtered_requirements": results["requirement_count"],
+                    "ignored_lines":      len(results["ignored_lines"]),
+                    "raw_match_scores":   results["raw_match_scores"],
                     "matched_skills":     len(results["matched_skills"]),
                     "missing_skills":     len(results["missing_skills"]),
                     "embeddings_used":    results["embeddings_used"],

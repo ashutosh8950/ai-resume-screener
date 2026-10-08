@@ -66,10 +66,9 @@ class ResumeAnalyzer:
         self.vectorizer = TfidfVectorizer(
             stop_words="english", ngram_range=(1, 2), min_df=1, sublinear_tf=True
         )
+
     def preprocess(self, text: str) -> str:
         text = embeddings.clean_text(text).lower()
-        text = re.sub(r"\n+", " ", text)
-        text = re.sub(r"[^\w\s\+\#\.]", " ", text)
         text = re.sub(r"\s+", " ", text)
         return text.strip()
 
@@ -95,19 +94,34 @@ class ResumeAnalyzer:
         return extract_skills(text)
 
     def analyze(self, resume: str, jd: str) -> dict:
-        tfidf = self.tfidf_similarity(resume, jd)
-        keyword = self.keyword_score(resume, jd)
+        requirements, ignored_lines = embeddings.filter_job_description(jd)
+        filtered_jd = "\n".join(requirements)
+        tfidf = self.tfidf_similarity(resume, filtered_jd)
+        keyword = self.keyword_score(resume, filtered_jd)
         semantic = 0.0
-        matched_pairs = []
-        gaps = []
+        match_result = {
+            "strong_matches": [],
+            "partial_matches": [],
+            "gaps": [],
+            "ignored_lines": ignored_lines,
+            "raw_match_scores": [],
+        }
         embeddings_used = False
         embedding_message = ""
         if not EMBEDDINGS_ENABLED:
             embedding_message = "Semantic embeddings are disabled; the 50% keyword + 50% TF-IDF fallback was used."
         else:
             try:
-                semantic, matched_pairs, gaps = embeddings.match_requirements(resume, jd)
-                embeddings_used = True
+                match_result = embeddings.match_requirements(
+                    resume,
+                    filtered_jd,
+                    requirements=requirements,
+                    ignored_lines=ignored_lines,
+                )
+                semantic = match_result["semantic_score"]
+                embeddings_used = bool(requirements)
+                if not requirements:
+                    embedding_message = "No requirement-focused JD lines remained after filtering."
             except Exception:
                 logger.exception("Semantic embedding analysis failed; using fallback scores")
                 embedding_message = (
@@ -131,7 +145,7 @@ class ResumeAnalyzer:
             scoring_mode = "tfidf_keyword_fallback"
 
         resume_skills = self.extract_skills(resume)
-        jd_skills = self.extract_skills(jd)
+        jd_skills = self.extract_skills(filtered_jd)
         return {
             "tfidf_score": tfidf,
             "keyword_score": keyword,
@@ -140,11 +154,16 @@ class ResumeAnalyzer:
             "matched_skills": [skill for skill in jd_skills if skill in resume_skills],
             "missing_skills": [skill for skill in jd_skills if skill not in resume_skills],
             "resume_token_count": len(self.tokenize(resume)),
-            "jd_token_count": len(self.tokenize(jd)),
+            "jd_token_count": len(self.tokenize(filtered_jd)),
+            "raw_jd_token_count": len(self.tokenize(jd)),
+            "requirement_count": len(requirements),
             "embeddings_used": embeddings_used,
             "embedding_message": embedding_message,
-            "matched_pairs": matched_pairs,
-            "gaps": gaps,
+            "strong_matches": match_result["strong_matches"],
+            "partial_matches": match_result["partial_matches"],
+            "gaps": match_result["gaps"],
+            "ignored_lines": match_result["ignored_lines"],
+            "raw_match_scores": match_result["raw_match_scores"],
             "scoring_mode": scoring_mode,
         }
 

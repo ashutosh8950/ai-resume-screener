@@ -8,7 +8,7 @@ An advanced resume-job description matcher using pretrained **FastEmbed semantic
 
 | Feature | Tech |
 |---|---|
-| **PDF Resume Upload** | `PyPDF2` — extract text from any resume PDF |
+| **PDF Resume Upload** | `pypdf` — extract and preserve Unicode text from resume PDFs |
 | **Semantic requirement matching** | `fastembed` ONNX Runtime on CPU with `BAAI/bge-small-en-v1.5` |
 | **Batch Mode** | Compare 1 resume against up to 6 jobs at once |
 | **Evidence and gaps** | Best resume sentence for each strong JD requirement, plus unmatched requirements |
@@ -62,8 +62,9 @@ Set `EMBEDDINGS_ENABLED=false` to use the keyword/TF-IDF fallback without loadin
 ### Semantic Matching (40%)
 - Splits job descriptions into requirement lines/sentences and resumes into evidence sentences/bullets
 - Embeds those snippets with `BAAI/bge-small-en-v1.5` through FastEmbed/ONNX on CPU
-- Matches each requirement to its most similar resume sentence using cosine similarity
-- Averages each requirement's best score; evidence and below-threshold gaps are shown in the UI
+- Matches each requirement to its best labeled resume evidence using cosine similarity
+- Uses raw cosine cutoffs of 0.5711 for Partial and 0.7068 for Strong; requirements naming only absent skills are Gaps
+- Rescales similarities below the partial cutoff to zero before averaging, so unrelated text contributes no semantic baseline
 
 ### TF-IDF Similarity (30%)
 - `TfidfVectorizer(ngram_range=(1,2), sublinear_tf=True)`
@@ -89,18 +90,18 @@ overall = keyword * 0.50 + tfidf * 0.50
 ## 📎 PDF Parser
 
 ```python
-from pdf_parser import PDFParser
+from resume_screener.pdf_parser import PDFParser
 
 parser = PDFParser()
 text   = parser.extract_text(open("resume.pdf", "rb").read())
 pages  = parser.get_page_count(open("resume.pdf", "rb").read())
 ```
 
-Handles:
+Uses pinned `pypdf==6.19.0`. Handles:
 - Multi-page PDFs
-- Hyphenated line breaks
-- Non-printable characters
-- Excess whitespace normalization
+- Unicode text, accents, en/em dashes, and ordinary punctuation
+- Bullet normalization and extracted line breaks
+- Missing spaces at common PDF text boundaries
 
 ---
 
@@ -118,11 +119,11 @@ Output:
 ## 📌 Resume Bullet Points (copy-paste ready)
 
 ```
-AI Resume Screener v2 | Python, Scikit-learn, FastEmbed, ONNX Runtime, PyPDF2, OpenAI, Streamlit, Plotly
+AI Resume Screener v2 | Python, Scikit-learn, FastEmbed, ONNX Runtime, pypdf, OpenAI, Streamlit, Plotly
 
 • Built a resume-job matcher combining pretrained semantic embeddings, TF-IDF, and keyword overlap.
 • Matched each job requirement to the strongest resume evidence using cosine similarity and surfaced gaps.
-• Added PDF resume parsing using PyPDF2 with multi-page extraction and text cleaning pipeline.
+• Added PDF resume parsing using pypdf with Unicode-preserving text cleanup.
 • Built a Batch Mode to rank one resume against up to 6 job descriptions simultaneously.
 • Integrated GPT-3.5 via prompt engineering to generate 5 personalized, actionable resume improvement tips.
 • Visualized results using an interactive Streamlit dashboard with Plotly grouped bar and donut charts.
@@ -141,6 +142,11 @@ AI Resume Screener v2 | Python, Scikit-learn, FastEmbed, ONNX Runtime, PyPDF2, O
 After installing runtime dependencies, run `python scripts/measure_memory.py` to load
 the model, perform one sample analysis, and print process peak RSS in MB. Model files
 are downloaded from the model registry on first use.
+
+To rerun the labeled semantic calibration, use `python scripts/calibrate.py`; the 27-pair
+calibration set selected partial at `0.5711` (best balanced cutoff, 89%) and strong at
+`0.7068` raw cosine. The strong boundary cleanly separated its calibration examples;
+the partial/gap examples overlap, so absent-skill gating supplies an additional check.
 
 ---
 
