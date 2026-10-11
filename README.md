@@ -9,7 +9,7 @@ An advanced resume-job description matcher using pretrained **FastEmbed semantic
 | Feature | Tech |
 |---|---|
 | **PDF Resume Upload** | `pypdf` — extract and preserve Unicode text from resume PDFs |
-| **Semantic requirement matching** | `fastembed` ONNX Runtime on CPU with `BAAI/bge-small-en-v1.5` |
+| **Semantic requirement matching** | `fastembed` ONNX Runtime on CPU; lite profile defaults to `sentence-transformers/all-MiniLM-L6-v2` |
 | **Evidence tables** | Best resume evidence for each requirement, with clear partial matches and gaps |
 | **Improvement suggestions** | Always-available rule-based advice; optional Gemini suggestions via a free API key |
 | **Batch Mode** | Compare 1 resume against up to 6 jobs at once |
@@ -54,8 +54,12 @@ streamlit run app.py --server.address 0.0.0.0 --server.port $PORT
 
 Python 3.11.9 is declared in `runtime.txt` and `.python-version`. Runtime settings
 are read from environment variables; see `.env.example` for names and defaults.
-The embedding model downloads on the first analysis and is then cached in-process.
-Set `EMBEDDINGS_ENABLED=false` to use the keyword/TF-IDF fallback without loading it.
+The lite embedding model downloads on the first analysis and is then cached in-process.
+Set `EMBEDDING_PROFILE=full` to use `BAAI/bge-small-en-v1.5`; customize model IDs with
+`EMBEDDING_MODEL_LITE` and `EMBEDDING_MODEL`. If available memory falls below
+`MIN_FREE_MB` (192 MB by default), embeddings are skipped and the app shows a notice
+before using the keyword/TF-IDF fallback. Set `EMBEDDINGS_ENABLED=false` to always use
+that fallback without loading a model.
 
 ---
 
@@ -63,9 +67,9 @@ Set `EMBEDDINGS_ENABLED=false` to use the keyword/TF-IDF fallback without loadin
 
 ### Semantic Coverage (55%)
 - Splits job descriptions into requirement lines/sentences and resumes into evidence sentences/bullets
-- Embeds those snippets with `BAAI/bge-small-en-v1.5` through FastEmbed/ONNX on CPU
+- Embeds those snippets in small batches with the selected FastEmbed/ONNX CPU profile
 - Matches each requirement to its best labeled resume evidence using cosine similarity
-- Uses raw cosine cutoffs of 0.5711 for Partial and 0.7068 for Strong; requirements naming only absent skills are Gaps
+- Lite profile raw cosine cutoffs: 0.1592 for Partial and 0.5134 for Strong. Full profile cutoffs: 0.5711 for Partial and 0.7068 for Strong. Requirements naming only absent skills are Gaps.
 - Converts each requirement to Gap `0`, Partial `0.40–0.70`, or Strong `0.80–1.00` coverage credit
 - Weights optional-section requirements at `0.5` in the semantic coverage mean
 
@@ -145,14 +149,15 @@ AI Resume Screener v2 | Python, Scikit-learn, FastEmbed, ONNX Runtime, pypdf, Ge
 
 ## Memory Measurement
 
-After installing runtime dependencies, run `python scripts/measure_memory.py` to load
-the model, perform one sample analysis, and print process peak RSS in MB. Model files
-are downloaded from the model registry on first use.
+After installing runtime dependencies, run `python scripts/measure_memory.py --profile lite`
+to load the lite model, perform one sample analysis, and print process peak RSS in MB.
+Use `--profile full` to measure BGE. Model files are downloaded on first use.
 
-To rerun the labeled semantic calibration, use `python scripts/calibrate.py`; the 27-pair
-calibration set selected partial at `0.5711` (best balanced cutoff, 89%) and strong at
-`0.7068` raw cosine. The strong boundary cleanly separated its calibration examples;
-the partial/gap examples overlap, so absent-skill gating supplies an additional check.
+To rerun labeled semantic calibration, use `python scripts/calibrate.py --profile lite`
+or `--profile full`. The script prints each labeled pair's raw cosine and suggests
+profile-specific partial and strong cutoffs from the 27-pair calibration set. Since
+the partial and irrelevant groups overlap, absent-skill gating supplies an additional
+check for technical requirements.
 
 ---
 

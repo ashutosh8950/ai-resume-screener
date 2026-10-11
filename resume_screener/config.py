@@ -27,6 +27,13 @@ EMBEDDINGS_ENABLED = os.getenv("EMBEDDINGS_ENABLED", "true").strip().lower() in 
     "1", "true", "yes", "on"
 }
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
+EMBEDDING_MODEL_LITE = os.getenv(
+    "EMBEDDING_MODEL_LITE", "sentence-transformers/all-MiniLM-L6-v2"
+)
+EMBEDDING_PROFILE = os.getenv("EMBEDDING_PROFILE", "lite").strip().lower()
+if EMBEDDING_PROFILE not in {"lite", "full"}:
+    raise ValueError("EMBEDDING_PROFILE must be 'lite' or 'full'")
+MIN_FREE_MB = _positive_int("MIN_FREE_MB", 192)
 SEMANTIC_WEIGHT = 0.55
 SKILL_WEIGHT = 0.30
 KEYWORD_WEIGHT = 0.075
@@ -34,5 +41,9 @@ TFIDF_WEIGHT = 0.075
 FALLBACK_SKILL_WEIGHT = 0.50
 FALLBACK_KEYWORD_WEIGHT = 0.25
 FALLBACK_TFIDF_WEIGHT = 0.25
-PARTIAL_MATCH_THRESHOLD = 0.5711
-STRONG_MATCH_THRESHOLD = 0.7068
+MATCH_THRESHOLDS = {
+    "lite": {"partial": 0.1592, "strong": 0.5134},
+    "full": {"partial": 0.5711, "strong": 0.7068},
+}
+PARTIAL_MATCH_THRESHOLD = MATCH_THRESHOLDS[EMBEDDING_PROFILE]["partial"]
+STRONG_MATCH_THRESHOLD = MATCH_THRESHOLDS[EMBEDDING_PROFILE]["strong"]

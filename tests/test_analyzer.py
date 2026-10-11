@@ -166,6 +166,7 @@ def test_skills_list_evidence_is_only_eligible_for_skill_requirements(monkeypatc
 
 def test_requirement_matching_uses_best_resume_evidence(monkeypatch):
     embedded_texts = []
+    monkeypatch.setattr(embeddings, "EMBEDDING_PROFILE", "full")
 
     class MockEmbeddingModel:
         def embed(self, texts):
@@ -245,7 +246,33 @@ def test_similarity_thresholds_group_strong_partial_and_gap():
     assert embeddings.coverage_credit(STRONG_MATCH_THRESHOLD + 0.15, "Strong") == 1.0
 
 
+def test_embedding_batches_are_limited_and_float32():
+    batch_sizes = []
+
+    class MockEmbeddingModel:
+        def embed(self, texts):
+            batch_sizes.append(len(texts))
+            for index, _ in enumerate(texts):
+                yield [float(index), 1.0]
+
+    vectors = embeddings._embed_texts(MockEmbeddingModel(), [str(i) for i in range(17)])
+
+    assert batch_sizes == [8, 8, 1]
+    assert vectors.dtype == "float32"
+    assert vectors.shape == (17, 2)
+
+
 def test_partial_cosine_is_preserved_for_general_expectations(monkeypatch):
+    from resume_screener import config
+
+    monkeypatch.setattr(embeddings, "EMBEDDING_PROFILE", "full")
+    monkeypatch.setattr(
+        embeddings, "PARTIAL_MATCH_THRESHOLD", config.MATCH_THRESHOLDS["full"]["partial"]
+    )
+    monkeypatch.setattr(
+        embeddings, "STRONG_MATCH_THRESHOLD", config.MATCH_THRESHOLDS["full"]["strong"]
+    )
+
     class MockEmbeddingModel:
         def embed(self, texts):
             for text in texts:
@@ -334,6 +361,70 @@ def test_analyze_embedding_failure_falls_back_cleanly(monkeypatch):
     )
     assert results["scoring_mode"] == "tfidf_keyword_fallback"
     assert "could not be loaded or run" in results["embedding_message"]
+
+
+def test_profile_selects_lite_and_full_models(monkeypatch):
+    monkeypatch.setattr(embeddings, "EMBEDDING_MODEL_LITE", "mock/lite")
+    monkeypatch.setattr(embeddings, "EMBEDDING_MODEL", "mock/full")
+
+    assert embeddings.get_embedding_model_name("lite") == "mock/lite"
+    assert embeddings.get_embedding_model_name("full") == "mock/full"
+
+
+def test_profile_switch_loads_one_mocked_model(monkeypatch):
+    import sys
+    from types import SimpleNamespace
+
+    constructor_calls = []
+
+    class MockTextEmbedding:
+        def __init__(self, **kwargs):
+            constructor_calls.append(kwargs)
+
+    monkeypatch.setattr(embeddings, "EMBEDDING_PROFILE", "lite")
+    monkeypatch.setattr(embeddings, "_embedding_model", None)
+    monkeypatch.setattr(embeddings, "get_available_memory_mb", lambda: 512.0)
+    monkeypatch.setitem(
+        sys.modules, "fastembed", SimpleNamespace(TextEmbedding=MockTextEmbedding)
+    )
+
+    model = embeddings.get_embedding_model()
+
+    assert model is embeddings.get_embedding_model()
+    assert constructor_calls == [{
+        "model_name": embeddings.EMBEDDING_MODEL_LITE,
+        "threads": 1,
+        "providers": ["CPUExecutionProvider"],
+        "lazy_load": True,
+    }]
+
+
+def test_low_memory_uses_fallback_with_clear_notice(monkeypatch):
+    import sys
+    from types import SimpleNamespace
+
+    constructor_calls = []
+
+    class MockTextEmbedding:
+        def __init__(self, **kwargs):
+            constructor_calls.append(kwargs)
+
+    monkeypatch.setitem(
+        sys.modules, "fastembed", SimpleNamespace(TextEmbedding=MockTextEmbedding)
+    )
+    monkeypatch.setattr(analyzer_module, "EMBEDDINGS_ENABLED", True)
+    monkeypatch.setattr(embeddings, "_embedding_model", None)
+    monkeypatch.setattr(embeddings, "get_available_memory_mb", lambda: 32.0)
+    results = ResumeAnalyzer().analyze(
+        "EXPERIENCE\nPython developer with SQL experience.",
+        "Requirements:\nBuild Python services and optimize SQL queries.",
+    )
+
+    assert results["embeddings_used"] is False
+    assert results["scoring_mode"] == "tfidf_keyword_fallback"
+    assert "only 32 MB" in results["embedding_message"]
+    assert "fallback was used" in results["embedding_message"]
+    assert constructor_calls == []
 
 
 def test_analyze_uses_configured_embedding_weights(monkeypatch):

@@ -1,12 +1,25 @@
 """Lazy CPU embedding model, document segmentation, and calibrated matching."""
 
+import os
+
+os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+os.environ.setdefault("TQDM_DISABLE", "1")
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+
+import gc
 import re
+import threading
 import unicodedata
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 
 from resume_screener.config import (
     EMBEDDING_MODEL,
+    EMBEDDING_MODEL_LITE,
+    EMBEDDING_PROFILE,
+    MIN_FREE_MB,
     PARTIAL_MATCH_THRESHOLD,
     STRONG_MATCH_THRESHOLD,
 )
@@ -18,7 +31,12 @@ from resume_screener.skills import (
 
 
 _embedding_model = None
+_embedding_model_lock = threading.Lock()
 BGE_QUERY_PREFIX = "Represent this sentence for searching relevant passages: "
+EMBEDDING_BATCH_SIZE = 8
+MAX_EMBEDDING_REQUIREMENTS = 40
+MAX_EMBEDDING_EVIDENCE = 120
+MAX_EMBEDDING_CHARS = 1000
 _LINE_BULLET_CHARS = "•·▪➢-–—"
 _BOX_CHARS = "□■▯▱▭▮▰▢◻◼◾◽▣▤▥▦▧▨▩⬜⬛"
 _BULLET_CHARS = _LINE_BULLET_CHARS + _BOX_CHARS + "●‣⁃◆◇"
@@ -482,17 +500,117 @@ def segment_resume(resume: str) -> list[dict]:
     return segments
 
 
+class EmbeddingMemoryError(RuntimeError):
+    """Raised when loading the model would exceed the configured memory reserve."""
+
+
+def get_available_memory_mb() -> float | None:
+    """Read available memory and account for a Linux container memory limit."""
+    if os.name == "nt":
+        try:
+            import ctypes
+
+            class MemoryStatus(ctypes.Structure):
+                _fields_ = [
+                    ("dwLength", ctypes.c_ulong),
+                    ("dwMemoryLoad", ctypes.c_ulong),
+                    ("ullTotalPhys", ctypes.c_ulonglong),
+                    ("ullAvailPhys", ctypes.c_ulonglong),
+                    ("ullTotalPageFile", ctypes.c_ulonglong),
+                    ("ullAvailPageFile", ctypes.c_ulonglong),
+                    ("ullTotalVirtual", ctypes.c_ulonglong),
+                    ("ullAvailVirtual", ctypes.c_ulonglong),
+                    ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+                ]
+
+            status = MemoryStatus()
+            status.dwLength = ctypes.sizeof(status)
+            if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
+                return status.ullAvailPhys / (1024 * 1024)
+        except (AttributeError, OSError):
+            return None
+        return None
+
+    available_mb = None
+    try:
+        with open("/proc/meminfo", encoding="ascii") as memory_info:
+            for line in memory_info:
+                if line.startswith("MemAvailable:"):
+                    available_mb = int(line.split()[1]) / 1024
+                    break
+    except (OSError, ValueError, IndexError):
+        return None
+
+    if available_mb is None:
+        return None
+
+    for current_path, limit_path in (
+        ("/sys/fs/cgroup/memory.current", "/sys/fs/cgroup/memory.max"),
+        ("/sys/fs/cgroup/memory/memory.usage_in_bytes", "/sys/fs/cgroup/memory/memory.limit_in_bytes"),
+    ):
+        try:
+            with open(current_path, encoding="ascii") as current_file:
+                current = int(current_file.read().strip())
+            with open(limit_path, encoding="ascii") as limit_file:
+                limit_text = limit_file.read().strip()
+            if limit_text == "max":
+                continue
+            limit = int(limit_text)
+            if 0 < limit < 2**60:
+                available_mb = min(available_mb, max(0, limit - current) / (1024 * 1024))
+                break
+        except (OSError, ValueError):
+            continue
+    return available_mb
+
+
+def get_embedding_model_name(profile: str | None = None) -> str:
+    selected_profile = profile or EMBEDDING_PROFILE
+    if selected_profile == "lite":
+        return EMBEDDING_MODEL_LITE
+    if selected_profile == "full":
+        return EMBEDDING_MODEL
+    raise ValueError("Embedding profile must be 'lite' or 'full'")
+
+
 def get_embedding_model():
-    """Create the fastembed model once, on the first requested analysis."""
+    """Create one guarded FastEmbed model per process, on first use."""
     global _embedding_model
     if _embedding_model is None:
-        from fastembed import TextEmbedding
+        with _embedding_model_lock:
+            if _embedding_model is None:
+                available_mb = get_available_memory_mb()
+                if available_mb is not None and available_mb < MIN_FREE_MB:
+                    raise EmbeddingMemoryError(
+                        f"Semantic embeddings were skipped because only {available_mb:.0f} MB "
+                        f"of memory is available; at least {MIN_FREE_MB} MB is required. "
+                        "The skill, keyword, and TF-IDF fallback was used."
+                    )
+                from fastembed import TextEmbedding
 
-        _embedding_model = TextEmbedding(
-            model_name=EMBEDDING_MODEL,
-            providers=["CPUExecutionProvider"],
-        )
+                _embedding_model = TextEmbedding(
+                    model_name=get_embedding_model_name(),
+                    threads=1,
+                    providers=["CPUExecutionProvider"],
+                    lazy_load=True,
+                )
     return _embedding_model
+
+
+def _embed_texts(model, texts: list[str]) -> np.ndarray:
+    vectors = None
+    for start in range(0, len(texts), EMBEDDING_BATCH_SIZE):
+        batch = texts[start:start + EMBEDDING_BATCH_SIZE]
+        batch_vectors = np.asarray(list(model.embed(batch)), dtype=np.float32)
+        if vectors is None:
+            vectors = np.empty(
+                (len(texts), batch_vectors.shape[1]), dtype=np.float32
+            )
+        vectors[start:start + len(batch_vectors)] = batch_vectors
+        del batch_vectors
+    if vectors is None:
+        return np.empty((0, 0), dtype=np.float32)
+    return vectors
 
 
 def coverage_credit(cosine: float, status: str) -> float:
@@ -541,10 +659,10 @@ def match_requirements(
     requirement_records = [
         {"text": item, "optional": False} if isinstance(item, str) else item
         for item in requirements
-    ]
+    ][:MAX_EMBEDDING_REQUIREMENTS]
     requirement_texts = [normalize_text(item["text"]) for item in requirement_records]
     requirement_skill_groups = [_record_skill_groups(item) for item in requirement_records]
-    evidence = segment_resume(resume)
+    evidence = segment_resume(resume)[:MAX_EMBEDDING_EVIDENCE]
     if not requirement_records:
         return {
             "semantic_score": 0.0,
@@ -570,8 +688,12 @@ def match_requirements(
                 or certification_topic
             )
         ])
-    queries = [BGE_QUERY_PREFIX + requirement for requirement in requirement_texts]
-    passages = [item["text"] for group in embedded_evidence for item in group]
+    query_prefix = BGE_QUERY_PREFIX if EMBEDDING_PROFILE == "full" else ""
+    queries = [
+        (query_prefix + requirement)[:MAX_EMBEDDING_CHARS]
+        for requirement in requirement_texts
+    ]
+    passages = [item["text"][:MAX_EMBEDDING_CHARS] for group in embedded_evidence for item in group]
     if not passages:
         pairs = [
             {
@@ -607,9 +729,8 @@ def match_requirements(
         }
 
     model = get_embedding_model()
-    vectors = np.asarray(list(model.embed(queries + passages)), dtype=np.float32)
-    query_vectors = vectors[:len(queries)]
-    passage_vectors = vectors[len(queries):]
+    query_vectors = _embed_texts(model, queries)
+    passage_vectors = _embed_texts(model, passages)
 
     strong_matches = []
     partial_matches = []
@@ -653,6 +774,7 @@ def match_requirements(
         row = cosine_similarity(query_vectors[index:index + 1], item_vectors)[0]
         best_index = int(np.argmax(row))
         raw_score = float(np.clip(row[best_index], 0.0, 1.0))
+        del item_vectors, row
         status = classify_similarity(raw_score)
         status_reason = ""
         generic_sql_mismatch = (
@@ -700,6 +822,9 @@ def match_requirements(
             partial_matches.append(pair)
         else:
             gaps.append(pair)
+
+    del query_vectors, passage_vectors, embedded_evidence
+    gc.collect()
 
     strong_matches.sort(key=lambda pair: pair["raw_score"], reverse=True)
     partial_matches.sort(key=lambda pair: pair["raw_score"], reverse=True)

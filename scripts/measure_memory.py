@@ -1,5 +1,6 @@
 """Load the semantic model, analyze one sample, and report peak RSS."""
 
+import argparse
 import os
 import sys
 from pathlib import Path
@@ -8,6 +9,16 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument(
+    "--profile",
+    choices=("lite", "full"),
+    default=os.environ.get("EMBEDDING_PROFILE", "lite").strip().lower(),
+)
+args = parser.parse_args()
+os.environ["EMBEDDING_PROFILE"] = args.profile
+
+from resume_screener.config import EMBEDDING_MODEL, EMBEDDING_MODEL_LITE
 from resume_screener.analyzer import ResumeAnalyzer
 from resume_screener.embeddings import get_embedding_model
 
@@ -60,6 +71,8 @@ def main() -> None:
         "Python engineer with experience building APIs and deploying services on AWS.",
         "Seeking an engineer to build Python services, design REST APIs, and deploy workloads to AWS.",
     )
+    model_name = EMBEDDING_MODEL_LITE if args.profile == "lite" else EMBEDDING_MODEL
+    print(f"Profile: {args.profile} ({model_name})")
     print(f"Scoring mode: {result['scoring_mode']}")
     print(f"Overall score: {result['overall_score']:.4f}")
     print(f"Peak RSS: {peak_rss_mb():.1f} MB")

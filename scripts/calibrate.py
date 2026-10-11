@@ -1,5 +1,7 @@
-"""Calibrate raw BGE cosine thresholds against labeled example pairs."""
+"""Calibrate cosine thresholds for the selected embedding profile."""
 
+import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -9,7 +11,27 @@ from sklearn.metrics.pairwise import cosine_similarity
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from resume_screener.embeddings import BGE_QUERY_PREFIX, get_embedding_model
+
+def _selected_profile() -> str:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--profile",
+        choices=("lite", "full"),
+        default=os.environ.get("EMBEDDING_PROFILE", "lite").strip().lower(),
+    )
+    args = parser.parse_args()
+    os.environ["EMBEDDING_PROFILE"] = args.profile
+    return args.profile
+
+
+PROFILE = _selected_profile()
+
+from resume_screener.config import EMBEDDING_MODEL, EMBEDDING_MODEL_LITE
+from resume_screener.embeddings import (
+    BGE_QUERY_PREFIX,
+    _embed_texts,
+    get_embedding_model,
+)
 
 
 CALIBRATION_PAIRS = [
@@ -65,15 +87,18 @@ def suggest_threshold(lower: list[float], upper: list[float]) -> tuple[float, st
 
 
 def main() -> None:
+    model_name = EMBEDDING_MODEL_LITE if PROFILE == "lite" else EMBEDDING_MODEL
     model = get_embedding_model()
-    queries = [BGE_QUERY_PREFIX + requirement for _, requirement, _ in CALIBRATION_PAIRS]
+    query_prefix = BGE_QUERY_PREFIX if PROFILE == "full" else ""
+    queries = [query_prefix + requirement for _, requirement, _ in CALIBRATION_PAIRS]
     passages = [evidence for _, _, evidence in CALIBRATION_PAIRS]
-    vectors = np.asarray(list(model.embed(queries + passages)), dtype=np.float32)
+    vectors = _embed_texts(model, queries + passages)
     query_vectors = vectors[:len(queries)]
     passage_vectors = vectors[len(queries):]
     scores = np.diag(cosine_similarity(query_vectors, passage_vectors)).tolist()
 
     by_label = {label: [] for label in ("irrelevant", "partial", "strong")}
+    print(f"Profile: {PROFILE} ({model_name})")
     print("LABEL      COSINE   REQUIREMENT  ->  RESUME EVIDENCE")
     print("-" * 112)
     scored_pairs = []
@@ -111,6 +136,7 @@ def main() -> None:
     for label, requirement, evidence, score in strong_errors:
         print(f"  {label:<10} {score:.4f}  {requirement} -> {evidence}")
     print("Score scale: max(0, (cosine - partial threshold) / (1 - partial threshold))")
+    del query_vectors, passage_vectors, vectors
 
 
 if __name__ == "__main__":

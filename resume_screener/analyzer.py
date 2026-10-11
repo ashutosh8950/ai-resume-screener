@@ -97,6 +97,9 @@ class ResumeAnalyzer:
                 embeddings_used = bool(requirements)
                 if not requirements:
                     embedding_message = "No requirement-focused JD lines remained after filtering."
+            except embeddings.EmbeddingMemoryError as error:
+                logger.info("Semantic embeddings skipped: %s", error)
+                embedding_message = str(error)
             except Exception:
                 logger.exception("Semantic embedding analysis failed; using fallback scores")
                 embedding_message = (
@@ -184,4 +187,3 @@ class ResumeAnalyzer:
             "raw_match_scores": match_result["raw_match_scores"],
             "scoring_mode": scoring_mode,
         }
-
