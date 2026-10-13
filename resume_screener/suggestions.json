@@ -1,0 +1,12 @@
+{
+  "django": "Build a small Django app with models, views, and tests, then describe what it does.",
+  "react": "Create a React feature with state and API data, and link it to a project you can demonstrate.",
+  "linux": "Practice shell navigation, permissions, and process management, then mention the commands used in a project.",
+  "postgresql": "Model a small dataset in PostgreSQL and show the schema, queries, and indexing choices.",
+  "mysql": "Build and query a relational schema in MySQL, noting the operations or performance result.",
+  "aws": "Deploy a small service on AWS and document the services, configuration, and outcome.",
+  "azure": "Publish a small app on Azure and describe the services and deployment steps.",
+  "gcp": "Deploy a sample workload on Google Cloud and record the services and measurable result.",
+  "kubernetes": "Run a containerized sample with Kubernetes and show its deployment and service manifests.",
+  "docker": "Containerize a project and document the image, runtime configuration, and reproducible result."
+}

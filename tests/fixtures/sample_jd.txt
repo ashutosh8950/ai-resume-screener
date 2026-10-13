@@ -1,0 +1,26 @@
+Junior Full-Stack Developer
+About Us: Fossaro is the dedicated back-office partner for growing education companies.
+As the operational backbone of Bounce Teachers, we coordinate administration and support.
+Experience: 0 to 2 years
+Education
+Bachelor of Science in Computer Science or related technical discipline.
+Other Important Skills
+Django REST Framework (DRF) knowledge.
+PostgreSQL or MySQL experience.
+Basic Linux/Ubuntu knowledge.
+Familiarity with Docker Compose.
+Exposure to AWS, Azure, or Google Cloud.
+Experience using AI coding tools such as GitHub Copilot, Cursor, Claude, ChatGPT, or similar tools.
+The candidate should be interested in:
+Learning new technologies and building accessible web experiences.
+REQUIREMENTS
+Develop production applications using React.
+Use Git and GitHub for source control and team collaboration.
+Use Python and SQL to maintain REST APIs.
+PREFERRED
+Experience with Kubernetes and cloud deployment tools.
+Additional Information
+This company offers a collaborative and inclusive culture.
+Health insurance, paid vacation, and retirement contributions.
+Location: Remote within the United States.
+Salary: Competitive annual compensation.

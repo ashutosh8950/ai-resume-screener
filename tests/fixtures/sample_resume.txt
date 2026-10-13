@@ -1,0 +1,21 @@
+Jordan Lee
+Computer Engineering Student
+Ashutosh Gupta +91 9999999999 ashutosh@gmail.com LinkedIn.com/in/ashutosh
+SUMMARY
+Computer Engineering student with hands-on experience building backend services and full-stack projects.
+Languages: Python, SQL
+Frameworks: Flask, FastAPI
+Developer Tools: Git, GitHub, Docker, MongoDB
+PROJECTS
+Campus Events API
+• Built a REST API with FastAPI and Flask for event listings and registrations
+0.99 ROC-AUC.
+• Implemented SQL queries and validation for event records.
+• Containerized the service with Docker and used GitHub for team code reviews.
+Machine Learning Classifier
+• Trained a scikit-learn classifier in Python and evaluated its precision and recall.
+Certifications
+Python Programming Certificate
+FastAPI Application Development Course
+EDUCATION
+Bachelor of Engineering, Computer Engineering, 2022-2026

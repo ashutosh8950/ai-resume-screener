@@ -1,0 +1,49 @@
+"""Environment-backed application settings."""
+
+import os
+
+
+def _positive_int(name: str, default: int) -> int:
+    try:
+        value = int(os.getenv(name, str(default)))
+    except ValueError as error:
+        raise ValueError(f"{name} must be a positive integer") from error
+    if value < 1:
+        raise ValueError(f"{name} must be a positive integer")
+    return value
+
+
+MAX_UPLOAD_MB = _positive_int("MAX_UPLOAD_MB", 5)
+MAX_PDF_PAGES = _positive_int("MAX_PDF_PAGES", 10)
+MAX_TEXT_CHARS = _positive_int("MAX_TEXT_CHARS", 20000)
+MAX_BATCH_JDS = max(2, _positive_int("MAX_BATCH_JDS", 6))
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+if LOG_LEVEL not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
+    LOG_LEVEL = "INFO"
+
+EMBEDDINGS_ENABLED = os.getenv("EMBEDDINGS_ENABLED", "true").strip().lower() in {
+    "1", "true", "yes", "on"
+}
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
+EMBEDDING_MODEL_LITE = os.getenv(
+    "EMBEDDING_MODEL_LITE", "sentence-transformers/all-MiniLM-L6-v2"
+)
+EMBEDDING_PROFILE = os.getenv("EMBEDDING_PROFILE", "lite").strip().lower()
+if EMBEDDING_PROFILE not in {"lite", "full"}:
+    raise ValueError("EMBEDDING_PROFILE must be 'lite' or 'full'")
+MIN_FREE_MB = _positive_int("MIN_FREE_MB", 192)
+SEMANTIC_WEIGHT = 0.55
+SKILL_WEIGHT = 0.30
+KEYWORD_WEIGHT = 0.075
+TFIDF_WEIGHT = 0.075
+FALLBACK_SKILL_WEIGHT = 0.50
+FALLBACK_KEYWORD_WEIGHT = 0.25
+FALLBACK_TFIDF_WEIGHT = 0.25
+MATCH_THRESHOLDS = {
+    "lite": {"partial": 0.1592, "strong": 0.5134},
+    "full": {"partial": 0.5711, "strong": 0.7068},
+}
+PARTIAL_MATCH_THRESHOLD = MATCH_THRESHOLDS[EMBEDDING_PROFILE]["partial"]
+STRONG_MATCH_THRESHOLD = MATCH_THRESHOLDS[EMBEDDING_PROFILE]["strong"]
