@@ -64,9 +64,39 @@ class ResumeAnalyzer:
     def extract_skills(self, text: str) -> list[str]:
         return extract_skills(text)
 
-    def analyze(self, resume: str, jd: str) -> dict:
+    def prepare_job_description(self, jd: str, precompute_embeddings: bool = False) -> dict:
         requirements, ignored_lines = embeddings.filter_job_description(jd)
-        filtered_jd = "\n".join(item["text"] for item in requirements)
+        prepared = {
+            "requirements": requirements,
+            "ignored_lines": ignored_lines,
+            "filtered_jd": "\n".join(item["text"] for item in requirements),
+            "query_vectors": None,
+            "embedding_message": "",
+        }
+        if not EMBEDDINGS_ENABLED:
+            prepared["embedding_message"] = (
+                "Semantic embeddings are disabled; the 50% skill coverage + "
+                "25% keyword + 25% TF-IDF fallback was used."
+            )
+        elif requirements and precompute_embeddings:
+            try:
+                prepared["query_vectors"] = embeddings.embed_requirements(requirements)
+            except embeddings.EmbeddingMemoryError as error:
+                logger.info("Semantic embeddings skipped: %s", error)
+                prepared["embedding_message"] = str(error)
+            except Exception:
+                logger.exception("Semantic requirement embedding failed; using fallback scores")
+                prepared["embedding_message"] = (
+                    "Semantic embeddings could not be loaded or run; the 50% skill coverage + "
+                    "25% keyword + 25% TF-IDF fallback was used."
+                )
+        return prepared
+
+    def analyze(self, resume: str, jd: str, prepared_job_description: dict | None = None) -> dict:
+        prepared = prepared_job_description or self.prepare_job_description(jd)
+        requirements = prepared["requirements"]
+        ignored_lines = prepared["ignored_lines"]
+        filtered_jd = prepared["filtered_jd"]
         tfidf = self.tfidf_similarity(resume, filtered_jd)
         keyword = self.keyword_score(resume, filtered_jd)
         semantic = 0.0
@@ -79,20 +109,20 @@ class ResumeAnalyzer:
             "raw_match_scores": [],
         }
         embeddings_used = False
-        embedding_message = ""
+        embedding_message = prepared["embedding_message"]
         if not EMBEDDINGS_ENABLED:
-            embedding_message = (
-                "Semantic embeddings are disabled; the 50% skill coverage + "
-                "25% keyword + 25% TF-IDF fallback was used."
-            )
+            pass
+        elif embedding_message:
+            pass
         else:
             try:
-                match_result = embeddings.match_requirements(
-                    resume,
-                    filtered_jd,
-                    requirements=requirements,
-                    ignored_lines=ignored_lines,
-                )
+                match_kwargs = {
+                    "requirements": requirements,
+                    "ignored_lines": ignored_lines,
+                }
+                if prepared["query_vectors"] is not None:
+                    match_kwargs["prepared_query_vectors"] = prepared["query_vectors"]
+                match_result = embeddings.match_requirements(resume, filtered_jd, **match_kwargs)
                 semantic = match_result["semantic_score"]
                 embeddings_used = bool(requirements)
                 if not requirements:

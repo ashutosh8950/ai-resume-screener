@@ -6,12 +6,14 @@ Streamlit UI with three new features:
     3. Batch mode — 1 resume vs multiple JDs
 """
 
+import gc
 import html
 
 import pandas as pd
 import streamlit as st
 
 from resume_screener.analyzer import ResumeAnalyzer
+from resume_screener.bulk import build_ranked_csv, check_upload_limits, rank_results
 from resume_screener.config import (
     FALLBACK_KEYWORD_WEIGHT,
     FALLBACK_SKILL_WEIGHT,
@@ -25,9 +27,14 @@ from resume_screener.config import (
     SKILL_WEIGHT,
     TFIDF_WEIGHT,
 )
+from resume_screener.embeddings import get_available_memory_mb
+from resume_screener.logger import get_logger
 from resume_screener.pdf_parser import PDFParseError, PDFParser
 from resume_screener.suggestions import suggestions_for_analysis
 from resume_screener.visualizer import plot_batch_chart, plot_score_breakdown, plot_skill_chart
+
+
+logger = get_logger("app")
 
 
 def _limit_text(text: str, label: str) -> str:
@@ -167,7 +174,7 @@ st.markdown("<p style='color:#9b96c9;font-size:.88rem;margin-top:-.3rem;'>Semant
 st.divider()
 
 # ── Tabs ──────────────────────────────────────────────────────────────────────
-tab1, tab2 = st.tabs(["🔍  Single Analysis", "📊  Batch Mode"])
+tab1, tab2, tab3 = st.tabs(["🔍  Single Analysis", "📊  Batch Mode", "📂  Bulk Resumes"])
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -492,3 +499,160 @@ with tab2:
                 st.markdown("**❌ Missing Skills**")
                 tags = " ".join([f"<span class='tag-missing'>{html.escape(s)}</span>" for s in best["missing_list"]])
                 st.markdown(tags or "<span class='tag-matched'>All covered!</span>", unsafe_allow_html=True)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TAB 3 — Bulk Resumes (many resumes vs one JD)
+# ═══════════════════════════════════════════════════════════════════════════════
+with tab3:
+    st.markdown("### Bulk Resumes - Compare Multiple Resumes Against One Job")
+    bulk_jd_text = st.text_area(
+        "Job description",
+        height=220,
+        key="bulk_jd_ta",
+        placeholder="Paste the job description here...",
+        label_visibility="collapsed",
+    )
+    bulk_jd_text = _limit_text(bulk_jd_text, "Job description")
+    bulk_files = st.file_uploader(
+        "Resume PDFs (up to 10 files, 5 MB each)",
+        type=["pdf"],
+        accept_multiple_files=True,
+        key="bulk_resume_pdfs",
+    )
+
+    upload_indices, upload_messages = check_upload_limits(
+        [(file.name, file.size) for file in bulk_files]
+    )
+    for upload_message in upload_messages:
+        st.warning(html.escape(upload_message))
+
+    bulk_signature = (
+        bulk_jd_text,
+        tuple((file.name, file.size) for file in bulk_files),
+    )
+    if st.session_state.get("bulk_signature") != bulk_signature:
+        st.session_state.pop("bulk_results", None)
+
+    bulk_run = st.button("Analyze resumes", key="bulk_analyze")
+    if bulk_run:
+        st.session_state.pop("bulk_results", None)
+        if not bulk_jd_text.strip():
+            st.error("Please provide a job description.")
+        elif not bulk_files:
+            st.error("Please upload at least one resume PDF.")
+        elif not upload_indices:
+            st.error("No uploaded resumes passed the file-size limit.")
+        else:
+            analyzer = ResumeAnalyzer()
+            prepared_jd = analyzer.prepare_job_description(
+                bulk_jd_text,
+                precompute_embeddings=True,
+            )
+            rows = []
+            details = {}
+            progress = st.progress(0, text="Analyzing resumes one at a time...")
+
+            for processed_index, file_index in enumerate(upload_indices, start=1):
+                uploaded_file = bulk_files[file_index]
+                file_name = uploaded_file.name
+                escaped_name = html.escape(file_name)
+                analysis = None
+                resume_text = ""
+                try:
+                    memory_mb = get_available_memory_mb()
+                    logger.info(
+                        "Available memory before bulk resume %s: %s",
+                        file_name,
+                        f"{memory_mb:.1f} MB" if memory_mb is not None else "unknown",
+                    )
+                    resume_text, _ = _read_pdf(uploaded_file, f"Resume {escaped_name}")
+                    if resume_text:
+                        analysis = analyzer.analyze(
+                            resume_text,
+                            bulk_jd_text,
+                            prepared_job_description=prepared_jd,
+                        )
+                        row = {
+                            "_detail_id": file_index,
+                            "file_name": file_name,
+                            "overall_pct": round(analysis["overall_score"] * 100),
+                            "semantic_pct": round(analysis["semantic_score"] * 100),
+                            "skill_coverage_pct": round(analysis["skill_coverage"] * 100),
+                            "strong_count": len(analysis["strong_matches"]),
+                            "partial_count": len(analysis["partial_matches"]),
+                            "gaps_count": len(analysis["gaps"]),
+                            "top_missing_skills": ", ".join(analysis["missing_skills"][:3]),
+                            "mode": "semantic" if analysis["embeddings_used"] else "fallback",
+                        }
+                        rows.append(row)
+                        details[file_index] = {
+                            "mode": row["mode"],
+                            "embedding_message": analysis["embedding_message"],
+                            "strong_matches": analysis["strong_matches"],
+                            "partial_matches": analysis["partial_matches"],
+                            "gaps": analysis["gaps"],
+                        }
+                except Exception:
+                    logger.exception("Bulk resume analysis failed for %s", file_name)
+                    st.error(f"Could not process {escaped_name}; the other resumes will continue.")
+                finally:
+                    memory_mb = get_available_memory_mb()
+                    logger.info(
+                        "Available memory after bulk resume %s: %s",
+                        file_name,
+                        f"{memory_mb:.1f} MB" if memory_mb is not None else "unknown",
+                    )
+                    del analysis, resume_text, uploaded_file
+                    gc.collect()
+                    progress.progress(
+                        processed_index / len(upload_indices),
+                        text=f"Processed {processed_index} of {len(upload_indices)} files",
+                    )
+
+            progress.empty()
+            ranked_rows = rank_results(rows)
+            details_by_rank = {}
+            for row in ranked_rows:
+                details_by_rank[row["rank"]] = details.pop(row.pop("_detail_id"))
+            st.session_state["bulk_signature"] = bulk_signature
+            st.session_state["bulk_results"] = {
+                "rows": ranked_rows,
+                "details": details_by_rank,
+            }
+            del prepared_jd, analyzer, bulk_files
+            gc.collect()
+
+    bulk_results = st.session_state.get("bulk_results")
+    if bulk_results and bulk_results.get("rows"):
+        ranked_rows = bulk_results["rows"]
+        st.dataframe(
+            pd.DataFrame(ranked_rows),
+            use_container_width=True,
+            hide_index=True,
+        )
+        st.download_button(
+            "Download ranked results (CSV)",
+            data=build_ranked_csv(ranked_rows),
+            file_name="bulk_resume_results.csv",
+            mime="text/csv",
+        )
+        selected_rank = st.selectbox(
+            "Resume evidence details",
+            options=[row["rank"] for row in ranked_rows],
+            format_func=lambda rank: (
+                f"{rank}. "
+                f"{next(row['file_name'] for row in ranked_rows if row['rank'] == rank)}"
+            ),
+        )
+        selected_row = next(row for row in ranked_rows if row["rank"] == selected_rank)
+        selected_details = bulk_results["details"][selected_rank]
+        st.markdown(f"### Evidence: {html.escape(selected_row['file_name'])}")
+        if selected_details["mode"] == "fallback":
+            st.info(selected_details["embedding_message"] or "Requirement evidence is unavailable in fallback mode.")
+        else:
+            _render_match_group("Strong", selected_details["strong_matches"], "No strong matches.")
+            _render_match_group("Partial", selected_details["partial_matches"], "No partial matches.")
+            _render_match_group("Gaps", selected_details["gaps"], "No gaps detected.")
+    elif bulk_results:
+        st.info("No resumes could be analyzed. Review the file messages above and try again.")

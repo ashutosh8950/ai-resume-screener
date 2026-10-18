@@ -1,3 +1,5 @@
+import numpy as np
+
 from resume_screener import analyzer as analyzer_module, embeddings
 from resume_screener.analyzer import ResumeAnalyzer
 from resume_screener.config import (
@@ -262,6 +264,87 @@ def test_embedding_batches_are_limited_and_float32():
     assert vectors.shape == (17, 2)
 
 
+def test_embed_and_match_paths_build_identical_truncated_queries(monkeypatch):
+    monkeypatch.setattr(embeddings, "EMBEDDING_PROFILE", "full")
+    monkeypatch.setattr(embeddings, "get_embedding_model", lambda: object())
+    monkeypatch.setattr(
+        embeddings,
+        "segment_resume",
+        lambda _resume: [{
+            "text": "Worked across product delivery teams.",
+            "section": "Experience",
+            "skills_only": False,
+            "certifications_only": False,
+        }],
+    )
+    embedded_text_batches = []
+
+    def capture_embedding_texts(_model, texts):
+        embedded_text_batches.append(texts)
+        return np.ones((len(texts), 2), dtype=np.float32)
+
+    monkeypatch.setattr(embeddings, "_embed_texts", capture_embedding_texts)
+    requirements = [{
+        "text": "Requirements: " + "product delivery experience " * 60,
+        "optional": False,
+        "skill_groups": [],
+        "examples": [],
+    }]
+
+    embeddings.embed_requirements(requirements)
+    embedded_query_strings = embedded_text_batches.pop(0)
+    embeddings.match_requirements(
+        "Experience:\nWorked across product delivery teams.",
+        "",
+        requirements=requirements,
+    )
+    matched_query_strings = embedded_text_batches[0]
+
+    assert embedded_query_strings == matched_query_strings
+    assert len(embedded_query_strings[0]) == embeddings.MAX_EMBEDDING_CHARS
+    assert embedded_query_strings[0].startswith(embeddings.BGE_QUERY_PREFIX)
+
+
+def test_mismatched_prepared_query_vectors_are_ignored_and_recomputed(monkeypatch):
+    monkeypatch.setattr(embeddings, "get_embedding_model", lambda: object())
+    monkeypatch.setattr(
+        embeddings,
+        "segment_resume",
+        lambda _resume: [{
+            "text": "Worked across product delivery teams.",
+            "section": "Experience",
+            "skills_only": False,
+            "certifications_only": False,
+        }],
+    )
+    embedded_text_batches = []
+    warnings = []
+
+    def capture_embedding_texts(_model, texts):
+        embedded_text_batches.append(texts)
+        return np.ones((len(texts), 2), dtype=np.float32)
+
+    monkeypatch.setattr(embeddings, "_embed_texts", capture_embedding_texts)
+    monkeypatch.setattr(embeddings.logger, "warning", warnings.append)
+    requirements = [{
+        "text": "Coordinate product delivery with teams effectively.",
+        "optional": False,
+        "skill_groups": [],
+        "examples": [],
+    }]
+
+    embeddings.match_requirements(
+        "Experience:\nWorked across product delivery teams.",
+        "",
+        requirements=requirements,
+        prepared_query_vectors=np.ones((2, 2), dtype=np.float32),
+    )
+
+    assert embedded_text_batches[0] == embeddings._build_query_strings(requirements)
+    assert len(embedded_text_batches) == 2
+    assert warnings and "row count" in warnings[0]
+
+
 def test_partial_cosine_is_preserved_for_general_expectations(monkeypatch):
     from resume_screener import config
 
@@ -456,6 +539,54 @@ def test_analyze_uses_configured_embedding_weights(monkeypatch):
     )
     assert results["semantic_score"] == 0.6
     assert results["scoring_mode"] == "semantic_embeddings"
+
+
+def test_prepared_job_description_embeddings_are_reused_for_each_resume(monkeypatch):
+    requirement = {
+        "text": "Python development experience required",
+        "optional": False,
+        "skill_groups": [],
+        "examples": [],
+    }
+    query_vectors = object()
+    embedding_calls = []
+    match_calls = []
+    monkeypatch.setattr(analyzer_module, "EMBEDDINGS_ENABLED", True)
+    monkeypatch.setattr(
+        analyzer_module.embeddings,
+        "filter_job_description",
+        lambda _jd: ([requirement], []),
+    )
+    monkeypatch.setattr(
+        analyzer_module.embeddings,
+        "embed_requirements",
+        lambda requirements: embedding_calls.append(requirements) or query_vectors,
+    )
+
+    def fake_match(_resume, _jd, **kwargs):
+        match_calls.append(kwargs)
+        return {
+            "semantic_score": 0.8,
+            "strong_matches": [],
+            "partial_matches": [],
+            "gaps": [],
+            "general_expectations": [],
+            "ignored_lines": [],
+            "raw_match_scores": [],
+        }
+
+    monkeypatch.setattr(analyzer_module.embeddings, "match_requirements", fake_match)
+    analyzer = ResumeAnalyzer()
+    prepared = analyzer.prepare_job_description("Python role", precompute_embeddings=True)
+
+    analyzer.analyze("Python engineer", "Python role", prepared)
+    analyzer.analyze("Another Python engineer", "Python role", prepared)
+
+    assert len(embedding_calls) == 1
+    assert [call["prepared_query_vectors"] for call in match_calls] == [
+        query_vectors,
+        query_vectors,
+    ]
 
 
 def test_analyze_scores_only_filtered_requirement_text(monkeypatch):

@@ -28,10 +28,12 @@ from resume_screener.skills import (
     extract_skills,
     extract_technical_skills,
 )
+from resume_screener.logger import get_logger
 
 
 _embedding_model = None
 _embedding_model_lock = threading.Lock()
+logger = get_logger("embeddings")
 BGE_QUERY_PREFIX = "Represent this sentence for searching relevant passages: "
 EMBEDDING_BATCH_SIZE = 8
 MAX_EMBEDDING_REQUIREMENTS = 40
@@ -613,6 +615,23 @@ def _embed_texts(model, texts: list[str]) -> np.ndarray:
     return vectors
 
 
+def _build_query_strings(requirements: list[dict]) -> list[str]:
+    query_prefix = BGE_QUERY_PREFIX if EMBEDDING_PROFILE == "full" else ""
+    return [
+        (query_prefix + normalize_text(item["text"]))[:MAX_EMBEDDING_CHARS]
+        for item in requirements
+    ]
+
+
+def embed_requirements(requirements: list[dict]) -> np.ndarray:
+    """Embed filtered job requirements once for reuse across resume analyses."""
+    requirement_records = requirements[:MAX_EMBEDDING_REQUIREMENTS]
+    if not requirement_records:
+        return np.empty((0, 0), dtype=np.float32)
+    queries = _build_query_strings(requirement_records)
+    return _embed_texts(get_embedding_model(), queries)
+
+
 def coverage_credit(cosine: float, status: str) -> float:
     if status == "Gap":
         return 0.0
@@ -651,6 +670,7 @@ def match_requirements(
     job_description: str,
     requirements: list[str | dict] | None = None,
     ignored_lines: list[dict] | None = None,
+    prepared_query_vectors: np.ndarray | None = None,
 ) -> dict:
     if requirements is None:
         requirements, detected_ignored_lines = filter_job_description(job_description)
@@ -688,11 +708,6 @@ def match_requirements(
                 or certification_topic
             )
         ])
-    query_prefix = BGE_QUERY_PREFIX if EMBEDDING_PROFILE == "full" else ""
-    queries = [
-        (query_prefix + requirement)[:MAX_EMBEDDING_CHARS]
-        for requirement in requirement_texts
-    ]
     passages = [item["text"][:MAX_EMBEDDING_CHARS] for group in embedded_evidence for item in group]
     if not passages:
         pairs = [
@@ -729,7 +744,17 @@ def match_requirements(
         }
 
     model = get_embedding_model()
-    query_vectors = _embed_texts(model, queries)
+    if prepared_query_vectors is not None and (
+        prepared_query_vectors.ndim != 2
+        or prepared_query_vectors.shape[0] != len(requirement_texts)
+    ):
+        logger.warning(
+            "Prepared query vector row count does not match requirements; recomputing vectors"
+        )
+        prepared_query_vectors = None
+    query_vectors = prepared_query_vectors
+    if query_vectors is None:
+        query_vectors = _embed_texts(model, _build_query_strings(requirement_records))
     passage_vectors = _embed_texts(model, passages)
 
     strong_matches = []
