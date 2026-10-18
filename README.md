@@ -1,126 +1,118 @@
-# 📄 AI Resume Screener v2
+[![CI](https://github.com/ashutosh8950/ai-resume-screener/actions/workflows/ci.yml/badge.svg)](https://github.com/ashutosh8950/ai-resume-screener/actions/workflows/ci.yml)
 
-> Compare a resume against a job description and get a weighted match score, skill-gap breakdown, and five targeted improvement suggestions.
+# AI Resume Screener
 
-[https://ai-resume-screener-w6h3.onrender.com](https://ai-resume-screener-w6h3.onrender.com) · [https://ashutosh8950.github.io/Portfolio/](https://ashutosh8950.github.io/Portfolio/)
+Compare a resume with a job description using local semantic embeddings, requirement-level evidence, skill coverage, keyword matching, and TF-IDF. The app runs locally and does not require an API key for analysis.
 
-*Free-tier hosting: the first load can take about a minute while the service wakes up.*
+[Production demo](https://ai-resume-screener-w6h3.onrender.com) | [Staging demo](https://ai-resume-screener-staging.onrender.com)
 
-Match scoring runs without any key. GPT-3.5 suggestions need your own OpenAI API key, entered in the sidebar for that session.
+The free hosting instance may take about a minute to wake up on its first request.
 
-An advanced resume-job description matcher using **TF-IDF**, **Word2Vec**, **keyword similarity**, and **GPT-3.5** suggestions.
+Gemini suggestions are optional. Add a free Gemini API key in the sidebar for the current session; without a key, rule-based suggestions are available every time. A `GEMINI_API_KEY` environment variable is also supported.
 
----
+## Features
 
-## 🚀 What's New in v2
+- **Free semantic embeddings:** FastEmbed runs the lite MiniLM profile locally through ONNX Runtime, without a paid embedding API.
+- **Requirement-to-evidence matching:** requirements are classified into Strong, Partial, and Gaps tables with the best matching resume evidence and match rationale.
+- **Skill-gap analysis:** see required technical skills found in the resume and skills that appear to be missing.
+- **Suggestions that always work:** deterministic rule-based suggestions are the default and remain available when Gemini is not configured or a request fails. Optional Gemini suggestions use a key provided per session.
+- **Batch Mode:** use one resume, pasted or uploaded once, against 2 to 6 job descriptions. The app ranks the jobs by overall score and shows a skill comparison and deeper skill-gap view for the best match. It does not compare many resumes against one job description.
+- **PDF input:** upload a resume PDF up to the configured size and page limits, or paste resume text.
+- **Memory-aware operation:** the default lite profile, lazy single-model loading, bounded embedding batches, and available-memory checks are designed for a 512 MB free-tier container. If memory is below the configured reserve, semantic embeddings are skipped and the scoring fallback is used.
 
-| Feature | Tech |
-|---|---|
-| **PDF Resume Upload** | `PyPDF2` — extract text from any resume PDF |
-| **Word2Vec Semantic Similarity** | `gensim` Word2Vec — meaning-level matching |
-| **Batch Mode** | Compare 1 resume against up to 6 jobs at once |
-| **4-score dashboard** | TF-IDF + Keywords + Word2Vec + Overall |
-| **Ranked job comparison chart** | Grouped Plotly bar chart |
+## How scoring works
 
----
+When semantic embeddings are available, the overall score combines:
 
-## 📁 Project Structure
+| Signal | Weight |
+|---|---:|
+| Semantic requirement coverage | 55% |
+| Technical skill coverage | 30% |
+| Keyword match | 7.5% |
+| TF-IDF similarity | 7.5% |
 
+Semantic matching compares job requirements with resume evidence. Skill coverage checks required technical skill groups, keyword matching measures shared terms, and TF-IDF measures term-weighted similarity over filtered job-description requirements.
+
+If embeddings are disabled, unavailable, or skipped because of memory pressure, the app uses the fallback score:
+
+| Signal | Fallback weight |
+|---|---:|
+| Technical skill coverage | 50% |
+| Keyword match | 25% |
+| TF-IDF similarity | 25% |
+
+## Tech stack
+
+- Python 3.11
+- Streamlit
+- FastEmbed and ONNX Runtime for local CPU embeddings
+- scikit-learn for TF-IDF and cosine similarity
+- pandas and Plotly for result tables and charts
+- Gemini API via `requests` for optional suggestions
+- pytest for automated tests
+
+## Run locally
+
+Clone the repository and create a virtual environment:
+
+```powershell
+git clone https://github.com/ashutosh8950/ai-resume-screener.git
+cd ai-resume-screener
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
 ```
-resume_screener/
-│
-├── app.py            ← Streamlit UI (tabs: Single + Batch)
-├── analyzer.py       ← TF-IDF, keyword match, Word2Vec, GPT
-├── pdf_parser.py     ← PDF text extraction (PyPDF2)     ← NEW
-├── visualizer.py     ← Plotly charts (updated for v2)
-├── requirements.txt  ← All dependencies
-└── README.md
-```
 
----
-
-## 🛠️ Setup & Run
+On macOS or Linux, activate the environment with:
 
 ```bash
-# 1. Install dependencies
-pip install -r requirements.txt
+python3 -m venv .venv
+source .venv/bin/activate
+```
 
-# 2. Run the app
+Install the application dependencies and start the app:
+
+```bash
+python -m pip install -r requirements.txt
 streamlit run app.py
-
-# 3. Open browser
-# http://localhost:8501
 ```
 
----
+## Run tests
 
-## 🧠 How Scoring Works
+Install the development dependencies and run pytest:
 
-### 1. TF-IDF Similarity (35%)
-- `TfidfVectorizer(ngram_range=(1,2), sublinear_tf=True)`
-- Cosine similarity between resume and JD vectors
-- Captures term importance, not just frequency
-
-### 2. Keyword Match (35%)
-- Tokenizes JD, removes stopwords
-- Checks fraction of JD keywords present in resume
-- Simulates how ATS systems scan resumes
-
-### 3. Word2Vec Semantic Similarity (30%) ← NEW
-- Trains `Word2Vec` on resume+JD as a small corpus
-- Builds 100-dim vectors for each word
-- Averages word vectors → document vector
-- Cosine similarity between document vectors
-- **Advantage**: catches synonyms and semantic matches TF-IDF misses
-  - Example: "deep learning" ≈ "neural networks" ≈ "pytorch"
-
-### Overall Score
-```python
-# With gensim:
-overall = tfidf * 0.35 + keyword * 0.35 + w2v * 0.30
-
-# Without gensim (fallback):
-overall = tfidf * 0.50 + keyword * 0.50
+```bash
+python -m pip install -r requirements-dev.txt
+python -m pytest -q
 ```
 
----
+The suite currently has 57 passing tests and 1 skipped.
 
-## 📎 PDF Parser
+## Project structure
 
-```python
-from pdf_parser import PDFParser
-
-parser = PDFParser()
-text   = parser.extract_text(open("resume.pdf", "rb").read())
-pages  = parser.get_page_count(open("resume.pdf", "rb").read())
-```
-
-Handles:
-- Multi-page PDFs
-- Hyphenated line breaks
-- Non-printable characters
-- Excess whitespace normalization
-
----
-
-## 📊 Batch Mode
-
-Upload one resume, add up to 6 job descriptions, click **Run Batch Analysis**.
-
-Output:
-- Ranked table of jobs by match %
-- Grouped bar chart (TF-IDF / Keywords / Word2Vec / Overall per job)
-- Deep-dive skill gap for the top match
-
----
-
-## 🔧 Further Extensions
-
-- Export batch results as PDF report
-- BERT/sentence-transformers for better semantic similarity
-- ATS keyword highlighting in resume text
-- Job scraper to auto-fetch JDs from LinkedIn/Naukri
-
----
-
-*Portfolio project — Ashutosh Gupta, B.E. Computer Engineering, Thapar Institute 2026*
+```text
+app.py
+resume_screener/
+	__init__.py
+	analyzer.py
+	config.py
+	embeddings.py
+	llm.py
+	logger.py
+	pdf_parser.py
+	skills.py
+	suggestions.py
+	visualizer.py
+	skills.json
+	suggestions.json
+tests/
+	fixtures/
+	test_analyzer.py
+	test_fixture_screener.py
+	test_pdf_parser.py
+	test_suggestions.py
+scripts/
+	calibrate.py
+	measure_memory.py
+.github/workflows/ci.yml
+requirements.txt
+requirements-dev.txt

@@ -344,7 +344,8 @@ with tab1:
                             f"by adding {html.escape(item['suggestion'])}"
                         )
                     elif section == "gaps":
-                        content = f"**{html.escape(item['requirement'])}:** {html.escape(item['suggestion'])}"
+                        requirement = html.escape(item["requirement"].strip().rstrip("."))
+                        content = f"**{requirement}:** {html.escape(item['suggestion'])}"
                     else:
                         content = html.escape(item)
                     st.markdown(f"- {content}")
