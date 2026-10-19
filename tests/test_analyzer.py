@@ -293,6 +293,87 @@ def test_embedding_batches_are_limited_and_float32():
     assert vectors.shape == (17, 2)
 
 
+def test_embedding_reloads_once_after_initial_attribute_error(monkeypatch):
+    loader_calls = []
+
+    class FailingModel:
+        def embed(self, texts):
+            raise AttributeError("tokenizer is not initialized")
+
+    class WorkingModel:
+        def embed(self, texts):
+            for _ in texts:
+                yield [1.0, 0.0]
+
+    models = [FailingModel(), WorkingModel()]
+
+    def load_model():
+        loader_calls.append(None)
+        return models.pop(0)
+
+    monkeypatch.setattr(embeddings, "_embedding_model", None)
+    monkeypatch.setattr(embeddings, "get_embedding_model", load_model)
+    initial_model = load_model()
+
+    vectors = embeddings._embed_texts(initial_model, ["resume text"])
+
+    assert vectors.tolist() == [[1.0, 0.0]]
+    assert len(loader_calls) == 2
+
+
+def test_always_failing_model_uses_analyzer_fallback(monkeypatch):
+    loader_calls = []
+
+    class FailingModel:
+        def embed(self, texts):
+            raise AttributeError("tokenizer is not initialized")
+
+    def load_model():
+        loader_calls.append(None)
+        return FailingModel()
+
+    monkeypatch.setattr(analyzer_module, "EMBEDDINGS_ENABLED", True)
+    monkeypatch.setattr(embeddings, "_embedding_model", None)
+    monkeypatch.setattr(embeddings, "get_embedding_model", load_model)
+
+    results = ResumeAnalyzer().analyze(
+        "Experience:\nPython developer with SQL experience.",
+        "Requirements:\nBuild Python services and optimize SQL queries.",
+    )
+
+    assert results["scoring_mode"] == "tfidf_keyword_fallback"
+    assert results["embeddings_used"] is False
+    assert len(loader_calls) == 2
+
+
+def test_successfully_loaded_model_is_cached_after_warmup(monkeypatch):
+    import sys
+    from types import SimpleNamespace
+
+    constructor_calls = []
+    embedded_texts = []
+
+    class MockTextEmbedding:
+        def __init__(self, **kwargs):
+            constructor_calls.append(kwargs)
+
+        def embed(self, texts):
+            embedded_texts.extend(texts)
+            yield [1.0, 0.0]
+
+    monkeypatch.setattr(embeddings, "_embedding_model", None)
+    monkeypatch.setattr(embeddings, "get_available_memory_mb", lambda: 512.0)
+    monkeypatch.setitem(
+        sys.modules, "fastembed", SimpleNamespace(TextEmbedding=MockTextEmbedding)
+    )
+
+    model = embeddings.get_embedding_model()
+
+    assert model is embeddings.get_embedding_model()
+    assert len(constructor_calls) == 1
+    assert embedded_texts == ["warmup"]
+
+
 def test_embed_and_match_paths_build_identical_truncated_queries(monkeypatch):
     monkeypatch.setattr(embeddings, "EMBEDDING_PROFILE", "full")
     monkeypatch.setattr(embeddings, "get_embedding_model", lambda: object())
@@ -492,6 +573,10 @@ def test_profile_switch_loads_one_mocked_model(monkeypatch):
     class MockTextEmbedding:
         def __init__(self, **kwargs):
             constructor_calls.append(kwargs)
+
+        def embed(self, texts):
+            for _ in texts:
+                yield [1.0, 0.0]
 
     monkeypatch.setattr(embeddings, "EMBEDDING_PROFILE", "lite")
     monkeypatch.setattr(embeddings, "_embedding_model", None)

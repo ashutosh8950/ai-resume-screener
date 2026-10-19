@@ -590,16 +590,18 @@ def get_embedding_model():
                     )
                 from fastembed import TextEmbedding
 
-                _embedding_model = TextEmbedding(
+                model = TextEmbedding(
                     model_name=get_embedding_model_name(),
                     threads=1,
                     providers=["CPUExecutionProvider"],
                     lazy_load=True,
                 )
+                list(model.embed(["warmup"]))
+                _embedding_model = model
     return _embedding_model
 
 
-def _embed_texts(model, texts: list[str]) -> np.ndarray:
+def _embed_texts_once(model, texts: list[str]) -> np.ndarray:
     vectors = None
     for start in range(0, len(texts), EMBEDDING_BATCH_SIZE):
         batch = texts[start:start + EMBEDDING_BATCH_SIZE]
@@ -613,6 +615,25 @@ def _embed_texts(model, texts: list[str]) -> np.ndarray:
     if vectors is None:
         return np.empty((0, 0), dtype=np.float32)
     return vectors
+
+
+def _embed_texts(model, texts: list[str]) -> np.ndarray:
+    global _embedding_model
+    try:
+        return _embed_texts_once(model, texts)
+    except Exception:
+        with _embedding_model_lock:
+            if _embedding_model is model:
+                _embedding_model = None
+        try:
+            replacement_model = get_embedding_model()
+            return _embed_texts_once(replacement_model, texts)
+        except Exception:
+            logger.warning(
+                "Embedding failed after reloading the model; using fallback scoring",
+                exc_info=True,
+            )
+            raise
 
 
 def _build_query_strings(requirements: list[dict]) -> list[str]:
