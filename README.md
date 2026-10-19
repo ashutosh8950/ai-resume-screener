@@ -16,9 +16,10 @@ Gemini suggestions are optional. Add a free Gemini API key in the sidebar for th
 - **Requirement-to-evidence matching:** requirements are classified into Strong, Partial, and Gaps tables with the best matching resume evidence and match rationale.
 - **Skill-gap analysis:** see required technical skills found in the resume and skills that appear to be missing.
 - **Suggestions that always work:** deterministic rule-based suggestions are the default and remain available when Gemini is not configured or a request fails. Optional Gemini suggestions use a key provided per session.
-- **Batch Mode:** use one resume, pasted or uploaded once, against 2 to 6 job descriptions. The app ranks the jobs by overall score and shows a skill comparison and deeper skill-gap view for the best match. It does not compare many resumes against one job description.
+- **Batch Mode:** use one resume, pasted or uploaded once, against 2 to 6 job descriptions. The app ranks the jobs by overall score and shows a skill comparison and deeper skill-gap view for the best match.
+- **Bulk Resumes:** upload up to 10 PDF resumes (5 MB each) against one job description to get a ranked table with overall and semantic scores, skill coverage, strong/partial/gap counts, and top missing skills; inspect per-resume evidence details and export CSV with spreadsheet-formula-injection protection.
 - **PDF input:** upload a resume PDF up to the configured size and page limits, or paste resume text.
-- **Memory-aware operation:** the default lite profile, lazy single-model loading, bounded embedding batches, and available-memory checks are designed for a 512 MB free-tier container. If memory is below the configured reserve, semantic embeddings are skipped and the scoring fallback is used.
+- **Memory-safe on Render's free 512 MB tier:** a 192 MB memory guard falls back to skill/keyword/TF-IDF scoring instead of crashing.
 
 ## How scoring works
 
@@ -85,7 +86,7 @@ python -m pip install -r requirements-dev.txt
 python -m pytest -q
 ```
 
-The suite currently has 57 passing tests and 1 skipped.
+The suite currently has 70 passing tests and 1 skipped.
 
 ## Project structure
 
@@ -94,6 +95,7 @@ app.py
 resume_screener/
 	__init__.py
 	analyzer.py
+	bulk.py  # Upload limits, ranking, and safe CSV export
 	config.py
 	embeddings.py
 	llm.py
@@ -107,6 +109,7 @@ resume_screener/
 tests/
 	fixtures/
 	test_analyzer.py
+	test_bulk.py
 	test_fixture_screener.py
 	test_pdf_parser.py
 	test_suggestions.py
