@@ -236,6 +236,35 @@ def test_soft_skills_do_not_cap_present_git_github_requirement(monkeypatch):
     assert result["strong_matches"][0]["missing_skills"] == []
 
 
+def test_github_skills_are_detected_independently_of_github_copilot():
+    from resume_screener.skills import extract_skills
+
+    skills = extract_skills(
+        "Tools: Git, GitHub, Docker. Used GitHub Copilot to speed up development."
+    )
+
+    assert "github" in skills
+    assert "github copilot" in skills
+
+
+def test_github_copilot_alone_does_not_report_github():
+    from resume_screener.skills import extract_skills
+
+    skills = extract_skills("Used GitHub Copilot to speed up development.")
+
+    assert "github copilot" in skills
+    assert "github" not in skills
+
+
+def test_standalone_github_does_not_report_github_copilot():
+    from resume_screener.skills import extract_skills
+
+    skills = extract_skills("Tools: GitHub")
+
+    assert "github" in skills
+    assert "github copilot" not in skills
+
+
 def test_similarity_thresholds_group_strong_partial_and_gap():
     from resume_screener.config import PARTIAL_MATCH_THRESHOLD, STRONG_MATCH_THRESHOLD
 
