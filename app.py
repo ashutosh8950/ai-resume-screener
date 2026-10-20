@@ -465,10 +465,12 @@ with tab1:
             sk1, sk2 = st.columns(2)
             with sk1:
                 tags = " ".join([f"<span class='tag-matched'>{html.escape(s)}</span>" for s in results["matched_skills"]])
-                st.markdown(f'<div class="skill-panel"><div class="skill-panel-title">✅ Matched skills</div>{tags or "<span class=\'tag-missing\'>None detected</span>"}</div>', unsafe_allow_html=True)
+                matched_content = tags or "<span class='tag-missing'>None detected</span>"
+                st.markdown(f'<div class="skill-panel"><div class="skill-panel-title">✅ Matched skills</div>{matched_content}</div>', unsafe_allow_html=True)
             with sk2:
                 tags = " ".join([f"<span class='tag-missing'>{html.escape(s)}</span>" for s in results["missing_skills"]])
-                st.markdown(f'<div class="skill-panel"><div class="skill-panel-title">❌ Missing skills</div>{tags or "<span class=\'tag-matched\'>All covered!</span>"}</div>', unsafe_allow_html=True)
+                missing_content = tags or "<span class='tag-matched'>All covered!</span>"
+                st.markdown(f'<div class="skill-panel"><div class="skill-panel-title">❌ Missing skills</div>{missing_content}</div>', unsafe_allow_html=True)
 
             st.markdown('<div class="section-kicker">Action plan</div><div class="dashboard-heading">Improvement suggestions</div><p class="dashboard-copy">Turn the detected gaps into concrete resume improvements.</p>', unsafe_allow_html=True)
             with st.spinner("Preparing improvement suggestions..."):
