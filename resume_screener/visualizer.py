@@ -3,14 +3,15 @@
 import plotly.graph_objects as go
 
 
-SURFACE = "#13131a"
-ACCENT = "#7c6bff"
-GREEN = "#3ddfa0"
-AMBER = "#f5c842"
-RED = "#ff6b6b"
-PURPLE = "#b8a9ff"
-TEXT = "#f0eeff"
-TEXT_MUTED = "#9b96c9"
+SURFACE = "#100b1b"
+ACCENT = "#a855f7"
+GREEN = "#6ee7b7"
+AMBER = "#fbbf24"
+RED = "#f472b6"
+PURPLE = "#e879f9"
+SEMANTIC = "#c084fc"
+TEXT = "#f7f3ff"
+TEXT_MUTED = "#a89bb8"
 
 
 def _base(title=""):
@@ -88,7 +89,7 @@ def plot_batch_chart(batch_results: list) -> go.Figure:
     series = [
         ("TF-IDF", [result["tfidf"] for result in batch_results], ACCENT),
         ("Keywords", [result["kw"] for result in batch_results], PURPLE),
-        ("Semantic", [result["semantic"] for result in batch_results], "#5de0d4"),
+        ("Semantic", [result["semantic"] for result in batch_results], SEMANTIC),
         ("Skill coverage", [result["skill_coverage"] for result in batch_results], AMBER),
         ("Overall", [result["overall"] for result in batch_results], GREEN),
     ]
