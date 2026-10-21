@@ -10,6 +10,8 @@ AMBER = "#fbbf24"
 RED = "#f472b6"
 PURPLE = "#e879f9"
 SEMANTIC = "#c084fc"
+TFIDF = "#7c8db5"
+KEYWORDS = "#f472b6"
 TEXT = "#f7f3ff"
 TEXT_MUTED = "#a89bb8"
 
@@ -39,7 +41,7 @@ def plot_score_breakdown(tfidf: int, keyword: int, semantic: int, overall: int) 
         x=values,
         y=labels,
         orientation="h",
-        marker=dict(color=[_color(value) for value in values], line=dict(width=0)),
+        marker=dict(color=[TFIDF, KEYWORDS, ACCENT, GREEN], line=dict(width=0)),
         text=[f"{value}%" for value in values],
         textposition="outside",
         textfont=dict(color=TEXT, size=12),
@@ -87,9 +89,9 @@ def plot_skill_chart(matched: list, missing: list) -> go.Figure:
 def plot_batch_chart(batch_results: list) -> go.Figure:
     titles = [result["title"][:28] + ("…" if len(result["title"]) > 28 else "") for result in batch_results]
     series = [
-        ("TF-IDF", [result["tfidf"] for result in batch_results], ACCENT),
-        ("Keywords", [result["kw"] for result in batch_results], PURPLE),
-        ("Semantic", [result["semantic"] for result in batch_results], SEMANTIC),
+        ("TF-IDF", [result["tfidf"] for result in batch_results], TFIDF),
+        ("Keywords", [result["kw"] for result in batch_results], KEYWORDS),
+        ("Semantic", [result["semantic"] for result in batch_results], ACCENT),
         ("Skill coverage", [result["skill_coverage"] for result in batch_results], AMBER),
         ("Overall", [result["overall"] for result in batch_results], GREEN),
     ]
@@ -112,8 +114,9 @@ def plot_batch_chart(batch_results: list) -> go.Figure:
         yaxis=dict(range=[0, 120], showgrid=False, zeroline=False, showticklabels=False),
         legend=dict(
             orientation="h",
-            yanchor="bottom",
-            y=1.02,
+            yanchor="top",
+            y=-0.22,
+            x=0,
             font=dict(color=TEXT_MUTED, size=11),
             bgcolor="rgba(0,0,0,0)",
         ),
@@ -121,6 +124,7 @@ def plot_batch_chart(batch_results: list) -> go.Figure:
         bargap=0.2,
         bargroupgap=0.05,
     )
+    fig.update_layout(margin=dict(l=20, r=20, t=40, b=70))
     return fig
 
 

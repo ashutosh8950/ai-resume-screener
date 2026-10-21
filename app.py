@@ -103,7 +103,7 @@ def _render_match_group(title: str, pairs: list[dict], empty_message: str) -> No
         with st.expander(f"Show {len(pairs) - 8} more {title.lower()} matches"):
             render_table(pairs[8:])
 
-st.set_page_config(page_title="AI Resume Screener v2", page_icon="📄", layout="wide")
+st.set_page_config(page_title="AI Resume Screener v2", layout="wide")
 
 # ── CSS ───────────────────────────────────────────────────────────────────────
 st.markdown("""
@@ -134,7 +134,7 @@ hr { border-color:rgba(168,85,247,.18)!important; }
 @keyframes gridDrift { from { background-position:0 0, 0 0; } to { background-position:0 42px, 42px 0; } }
 @keyframes ambientFloat { from { transform:translate3d(0,0,0) scale(1); } to { transform:translate3d(-2rem,1.5rem,0) scale(1.08); } }
 .app-hero { position:relative; overflow:hidden; margin:0 0 1.25rem; padding:1.18rem 1.55rem 1.05rem; border:1px solid rgba(168,85,247,.28); border-radius:18px; background:linear-gradient(135deg, rgba(22,12,38,.92), rgba(12,9,20,.78)); box-shadow:0 0 46px rgba(124,58,237,.10), inset 0 1px rgba(255,255,255,.05); animation:heroRise .7s ease both; }
-.app-hero::after { content:""; position:absolute; width:9rem; height:9rem; right:8%; top:-5rem; border:1px solid rgba(232,121,249,.23); border-radius:50%; box-shadow:0 0 0 1rem rgba(168,85,247,.035), 0 0 45px rgba(168,85,247,.16); animation:orbPulse 4s ease-in-out infinite; }
+.app-hero::after { content:""; position:absolute; width:8rem; height:8rem; right:7%; top:1.15rem; border:1px solid rgba(232,121,249,.28); border-radius:50%; box-shadow:0 0 0 1rem rgba(168,85,247,.035), 0 0 45px rgba(168,85,247,.16); animation:orbPulse 4s ease-in-out infinite; }
 .app-kicker { color:#e879f9; font:700 .68rem/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing:.16em; text-transform:uppercase; margin-bottom:.65rem; }
 .app-title { margin:0!important; font-size:clamp(1.8rem, 4vw, 3rem)!important; font-weight:800!important; }
 .app-title span { color:#e879f9; text-shadow:0 0 22px rgba(232,121,249,.32); }
@@ -160,12 +160,19 @@ hr { border-color:rgba(168,85,247,.18)!important; }
 .sidebar-brand-title span { color:#e879f9; }
 .sidebar-section-label { color:#8f849e; font:700 .62rem/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing:.13em; text-transform:uppercase; margin:.85rem 0 .45rem; }
 .stRadio > div { gap:.35rem!important; }
-.stRadio > label { border:0!important; border-radius:0!important; padding:0 0 .35rem!important; background:transparent!important; box-shadow:none!important; color:#8f849e!important; font-size:.72rem!important; }
-.stRadio label { border:1px solid rgba(168,85,247,.18); border-radius:9px; padding:.35rem .55rem!important; background:rgba(16,11,27,.5); transition:all .2s ease; }
+.stRadio > label { border:0!important; border-radius:0!important; padding:0 0 .35rem!important; background:transparent!important; box-shadow:none!important; color:#b8acc8!important; font-size:.72rem!important; }
+.stRadio label { border:1px solid rgba(168,85,247,.18); border-radius:9px; padding:.35rem .55rem!important; background:rgba(16,11,27,.5); color:#b8acc8!important; transition:all .2s ease; }
+.stRadio label span, .stRadio label p { color:#b8acc8!important; }
 .stRadio label:hover { border-color:rgba(232,121,249,.48); background:rgba(168,85,247,.09); }
 .stRadio label:has(input:checked) { border-color:#a855f7; background:rgba(168,85,247,.16); box-shadow:0 0 16px rgba(168,85,247,.12); }
+[data-testid="stSlider"] [role="slider"] { background:#a855f7!important; border-color:#e879f9!important; box-shadow:0 0 0 2px rgba(168,85,247,.16)!important; }
+[data-testid="stSlider"] [data-baseweb="slider"] > div:first-child > div { background:#a855f7!important; }
+[data-testid="stSlider"] [data-baseweb="slider"] > div:first-child > div > div { background:#a855f7!important; border-color:#e879f9!important; }
+.stSlider [data-testid="stMarkdownContainer"] { color:#c084fc!important; }
+.stRadio [data-baseweb="radio"] [aria-checked="true"] > div:first-child { background:#a855f7!important; border-color:#e879f9!important; }
+.stRadio [data-baseweb="radio"] [aria-checked="true"] svg { fill:#a855f7!important; color:#a855f7!important; }
 .empty-state { margin:1.35rem 0; padding:1.55rem 1.25rem; text-align:center; border:1px dashed rgba(168,85,247,.3); border-radius:16px; background:rgba(16,11,27,.45); }
-.empty-state-icon { font-size:1.8rem; filter:drop-shadow(0 0 12px rgba(232,121,249,.4)); }
+.empty-state-icon { width:12px; height:12px; margin:0 auto; border-radius:50%; background:#e879f9; box-shadow:0 0 16px rgba(232,121,249,.7); }
 .empty-state-title { color:#f7f3ff; font-size:1.05rem; font-weight:750; margin:.55rem 0 .3rem; }
 .empty-state-copy { color:#8f849e; font-size:.8rem; line-height:1.6; max-width:560px; margin:0 auto; }
 .analysis-status { display:inline-flex; align-items:center; gap:.4rem; margin-top:.65rem; padding:.35rem .65rem; border:1px solid rgba(168,85,247,.25); border-radius:999px; color:#b8acc8; font:600 .65rem/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; }
@@ -210,9 +217,13 @@ hr { border-color:rgba(168,85,247,.18)!important; }
 .tag-semantic  { background:rgba(168,85,247,.12); border:1px solid rgba(168,85,247,.38); color:#d8b4fe;
                 border-radius:20px; padding:3px 11px; font-size:.76rem; display:inline-block; margin:3px; }
 .batch-title  { font-size:.88rem; font-weight:600; color:#f7f3ff; margin-bottom:.4rem; }
+.score-bar { width:100%; height:4px; margin:.2rem 0 .75rem; overflow:hidden; border-radius:999px; background:rgba(168,85,247,.12); }
+.score-bar span { display:block; height:100%; border-radius:inherit; box-shadow:0 0 10px currentColor; }
 .stTextArea textarea, .stTextInput input, [data-baseweb="input"] input { background:rgba(13,10,23,.88)!important; color:#f7f3ff!important; border:1px solid rgba(168,85,247,.25)!important; border-radius:11px!important; font-size:.85rem!important; transition:border-color .2s ease, box-shadow .2s ease; }
+.stTextArea [data-baseweb="base-input"], .stTextInput [data-baseweb="base-input"], [data-baseweb="input"] { background:rgba(13,10,23,.88)!important; border-color:rgba(168,85,247,.25)!important; }
+.stTextArea textarea::placeholder, .stTextInput input::placeholder { color:#b8acc8!important; opacity:1!important; }
 .stTextArea textarea:focus, .stTextInput input:focus { border-color:#e879f9!important; box-shadow:0 0 0 1px #e879f9, 0 0 22px rgba(232,121,249,.12)!important; }
-.stButton>button, .stDownloadButton>button { background:linear-gradient(135deg, #a855f7, #7c3aed)!important; color:#fff!important; border:1px solid rgba(232,121,249,.45)!important; border-radius:10px!important; padding:.62rem 1.5rem!important; font-weight:750!important; font-size:.95rem!important; width:min(100%, 330px); margin:.15rem auto!important; box-shadow:0 8px 22px rgba(124,58,237,.22); transition:transform .2s ease, box-shadow .2s ease, filter .2s ease; }
+.stButton>button, .stDownloadButton>button { background:linear-gradient(135deg, #a855f7, #7c3aed)!important; color:#fff!important; border:1px solid rgba(232,121,249,.45)!important; border-radius:10px!important; padding:.62rem 1.5rem!important; font-weight:750!important; font-size:.95rem!important; width:100%!important; margin:.15rem 0!important; box-shadow:0 8px 22px rgba(124,58,237,.22); transition:transform .2s ease, box-shadow .2s ease, filter .2s ease; }
 .stButton>button:hover, .stDownloadButton>button:hover { filter:brightness(1.12); transform:translateY(-2px); box-shadow:0 12px 28px rgba(168,85,247,.34); }
 .stButton>button:active, .stDownloadButton>button:active { transform:translateY(0); }
 .stTabs [data-baseweb="tab-list"] { background:rgba(19,12,31,.82); border:1px solid rgba(168,85,247,.2); border-radius:12px; padding:5px!important; gap:7px!important; }
@@ -238,10 +249,13 @@ div[data-testid="stExpander"] summary:hover { color:#e879f9!important; }
 [data-testid="stDataFrame"] { border:1px solid rgba(168,85,247,.2); border-radius:12px; overflow:hidden; box-shadow:0 10px 28px rgba(0,0,0,.18); }
 [data-testid="stPlotlyChart"] { border:1px solid rgba(168,85,247,.18); border-radius:14px; padding:.35rem; background:rgba(12,8,20,.58); }
 .stAlert { border-radius:11px!important; border:1px solid rgba(168,85,247,.24)!important; background:rgba(25,15,40,.76)!important; }
+.stCaption, [data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] p { color:#b8acc8!important; }
 .input-meta { display:flex; justify-content:space-between; gap:.75rem; margin:.45rem .2rem .15rem; color:#756b86; font:600 .62rem/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing:.03em; }
 .input-meta strong { color:#c084fc; font-weight:700; }
 .result-hero-note { color:#8f849e; font-size:.72rem; margin-top:.3rem; }
 .stApp [data-testid="stToolbar"] { display:none!important; }
+.stApp header[data-testid="stHeader"], .stApp [data-testid="stHeader"] { background:rgba(7,7,13,.96)!important; }
+.stApp [data-testid="stDecoration"] { background:linear-gradient(90deg, #7c3aed, #a855f7, #e879f9)!important; }
 .stTextArea { padding:.25rem; border:1px solid rgba(168,85,247,.13); border-radius:13px; background:rgba(12,8,20,.3); box-shadow:inset 0 1px rgba(255,255,255,.02); }
 .stTextArea:focus-within { border-color:rgba(232,121,249,.42); box-shadow:0 0 22px rgba(168,85,247,.10), inset 0 1px rgba(255,255,255,.03); }
 @media (prefers-reduced-motion: reduce) {
@@ -250,7 +264,7 @@ div[data-testid="stExpander"] summary:hover { color:#e879f9!important; }
 @media (max-width: 768px) {
     .block-container { padding:1.3rem 1rem 3rem; }
     .app-hero { padding:1.2rem 1rem 1rem; }
-    .app-hero::after { right:-4rem; }
+    .app-hero::after { right:1rem; }
     .workflow-strip { align-items:flex-start; flex-direction:column; gap:.45rem; }
     .workflow-arrow { display:none; }
     .result-hero { align-items:flex-start; }
@@ -285,7 +299,7 @@ with st.sidebar:
     )
     st.markdown("---")
     st.markdown('<div class="sidebar-section-label">Capabilities</div>', unsafe_allow_html=True)
-    st.markdown("- 🧠 Semantic embeddings and evidence tables\n- 📎 PDF resume upload\n- ✨ Optional Gemini suggestions\n- 📊 Batch mode (1 vs many)")
+    st.markdown("- Semantic embeddings and evidence tables\n- PDF resume upload\n- Optional Gemini suggestions\n- Batch mode (1 vs many)")
     st.markdown("---")
     st.markdown("<p style='color:#756b86;font-size:.78rem;'>Python · Scikit-learn · FastEmbed ONNX · pypdf · Gemini (optional) · Streamlit</p>", unsafe_allow_html=True)
 
@@ -352,10 +366,11 @@ with tab1:
         jd_text = _limit_text(jd_text, "Job description")
         st.markdown(f'<div class="input-meta"><span><strong>{len(jd_text.split())}</strong> words</span><span>{len(jd_text):,} characters</span></div>', unsafe_allow_html=True)
 
-    analyze_btn = st.button("✦  Run Match Analysis", key="analyze_single", type="primary")
+    analyze_btn = st.button("Run Match Analysis", key="analyze_single", type="primary", use_container_width=True)
+    st.caption("First run after idle can take 1-2 minutes while the model loads. Click once and wait.")
 
     if not analyze_btn:
-        st.markdown('<div class="empty-state"><div class="empty-state-icon">✦</div><div class="empty-state-title">Your match workspace is ready</div><p class="empty-state-copy">Add a resume and a target job description above to generate semantic evidence, skill coverage, score breakdowns, and an actionable improvement plan.</p></div>', unsafe_allow_html=True)
+        st.markdown('<div class="empty-state"><div class="empty-state-icon"></div><div class="empty-state-title">Your match workspace is ready</div><p class="empty-state-copy">Add a resume and a target job description above to generate semantic evidence, skill coverage, score breakdowns, and an actionable improvement plan.</p></div>', unsafe_allow_html=True)
 
     # ── Results ───────────────────────────────────────────────────────────────
     if analyze_btn:
@@ -367,7 +382,7 @@ with tab1:
                 results  = analyzer.analyze(resume_text, jd_text)
 
             st.divider()
-            st.markdown('<div class="section-kicker">Match intelligence</div><div class="dashboard-heading">📊 Resume-to-role fit</div><p class="dashboard-copy">A weighted view of how strongly the resume supports this job description.</p>', unsafe_allow_html=True)
+            st.markdown('<div class="section-kicker">Match intelligence</div><div class="dashboard-heading">Resume-to-role fit</div><p class="dashboard-copy">A weighted view of how strongly the resume supports this job description.</p>', unsafe_allow_html=True)
 
             tfidf_pct   = int(results["tfidf_score"]   * 100)
             kw_pct      = int(results["keyword_score"] * 100)
@@ -410,13 +425,13 @@ with tab1:
             # Verdict
             if overall_pct >= 65:
                 vs = "background:rgba(74,222,170,.10);border:1px solid rgba(74,222,170,.35);color:#6ee7b7;"
-                vt = "✅ Strong Match — great alignment with this role!"
+                vt = "Strong Match — great alignment with this role!"
             elif overall_pct >= 40:
                 vs = "background:rgba(251,191,36,.10);border:1px solid rgba(251,191,36,.35);color:#fbbf24;"
                 vt = "⚠️ Moderate Match — a few gaps to address."
             else:
                 vs = "background:rgba(244,114,182,.10);border:1px solid rgba(244,114,182,.35);color:#f472b6;"
-                vt = "❌ Weak Match — significant improvements needed."
+                vt = "Weak Match — significant improvements needed."
             st.markdown(f"<div class='verdict-box' style='{vs}'>{vt}</div>", unsafe_allow_html=True)
 
             if not results["embeddings_used"]:
@@ -452,25 +467,27 @@ with tab1:
             with ch1:
                 st.plotly_chart(
                     plot_score_breakdown(tfidf_pct, kw_pct, semantic_pct, overall_pct),
-                    use_container_width=True
+                    use_container_width=True,
+                    config={"displayModeBar": False},
                 )
             with ch2:
                 st.plotly_chart(
                     plot_skill_chart(results["matched_skills"], results["missing_skills"]),
-                    use_container_width=True
+                    use_container_width=True,
+                    config={"displayModeBar": False},
                 )
 
             # Skill gap
-            st.markdown('<div class="section-kicker">Capability map</div><div class="dashboard-heading">🔬 Skill gap analysis</div><p class="dashboard-copy">See which technical skills are already supported and which ones need stronger evidence.</p>', unsafe_allow_html=True)
+            st.markdown('<div class="section-kicker">Capability map</div><div class="dashboard-heading">Skill gap analysis</div><p class="dashboard-copy">See which technical skills are already supported and which ones need stronger evidence.</p>', unsafe_allow_html=True)
             sk1, sk2 = st.columns(2)
             with sk1:
                 tags = " ".join([f"<span class='tag-matched'>{html.escape(s)}</span>" for s in results["matched_skills"]])
                 matched_content = tags or "<span class='tag-missing'>None detected</span>"
-                st.markdown(f'<div class="skill-panel"><div class="skill-panel-title">✅ Matched skills</div>{matched_content}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="skill-panel"><div class="skill-panel-title">Matched skills</div>{matched_content}</div>', unsafe_allow_html=True)
             with sk2:
                 tags = " ".join([f"<span class='tag-missing'>{html.escape(s)}</span>" for s in results["missing_skills"]])
                 missing_content = tags or "<span class='tag-matched'>All covered!</span>"
-                st.markdown(f'<div class="skill-panel"><div class="skill-panel-title">❌ Missing skills</div>{missing_content}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="skill-panel"><div class="skill-panel-title">Missing skills</div>{missing_content}</div>', unsafe_allow_html=True)
 
             st.markdown('<div class="section-kicker">Action plan</div><div class="dashboard-heading">Improvement suggestions</div><p class="dashboard-copy">Turn the detected gaps into concrete resume improvements.</p>', unsafe_allow_html=True)
             with st.spinner("Preparing improvement suggestions..."):
@@ -513,7 +530,7 @@ with tab1:
                     st.markdown(f"- {content}")
 
             # Raw data
-            with st.expander("🔢 Raw scores & token stats"):
+            with st.expander("Raw scores & token stats"):
                 st.json({
                     "tfidf_score":        round(results["tfidf_score"], 4),
                     "keyword_score":      round(results["keyword_score"], 4),
@@ -539,11 +556,11 @@ with tab1:
 # TAB 2 — Batch Mode (1 resume vs multiple JDs)
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab2:
-    st.markdown("### 📊 Batch Mode — Compare Your Resume Against Multiple Jobs")
+    st.markdown("### Batch Mode — Compare Your Resume Against Multiple Jobs")
     st.markdown("<p style='color:#a89bb8;font-size:.85rem;'>Paste or upload your resume once, then add multiple job descriptions to rank which roles suit you best.</p>", unsafe_allow_html=True)
 
     # Resume input
-    st.markdown("**📋 Your Resume (used for all comparisons)**")
+    st.markdown("**Your Resume (used for all comparisons)**")
     batch_resume_mode = st.radio("Input method", ["Paste text", "Upload PDF"], horizontal=True, key="b_mode")
 
     batch_resume = ""
@@ -562,7 +579,7 @@ with tab2:
     st.markdown("---")
 
     # JD inputs
-    st.markdown("**💼 Job Descriptions (add up to 6)**")
+    st.markdown("**Job Descriptions (add up to 6)**")
     num_jds = st.slider("Number of job descriptions", min_value=2,
                         max_value=MAX_BATCH_JDS, value=min(3, MAX_BATCH_JDS))
 
@@ -577,7 +594,8 @@ with tab2:
             text = _limit_text(text, f"Job {i + 1} description")
             jd_entries.append({"title": title or f"Job {i+1}", "text": text})
 
-    batch_btn = st.button("✦  Rank Job Matches", key="batch_run", type="primary")
+    batch_btn = st.button("Rank Job Matches", key="batch_run", type="primary", use_container_width=True)
+    st.caption("First run after idle can take 1-2 minutes while the model loads. Click once and wait.")
 
     if batch_btn:
         filled = [(e["title"], e["text"]) for e in jd_entries if e["text"].strip()]
@@ -613,17 +631,18 @@ with tab2:
             batch_results.sort(key=lambda x: x["overall"], reverse=True)
 
             st.divider()
-            st.markdown("### 🏆 Ranking — Best Matched Roles")
+            st.markdown("### Ranking — Best Matched Roles")
 
             # Bar chart
             st.plotly_chart(
                 plot_batch_chart(batch_results),
-                use_container_width=True
+                use_container_width=True,
+                config={"displayModeBar": False},
             )
 
             # Detailed cards
             for rank, br in enumerate(batch_results):
-                medal = ["🥇", "🥈", "🥉"][rank] if rank < 3 else f"#{rank+1}"
+                medal = f"#{rank+1}"
                 oc    = "#6ee7b7" if br["overall"] >= 65 else "#fbbf24" if br["overall"] >= 40 else "#f472b6"
                 verdict = "Strong Match" if br["overall"] >= 65 else "Moderate" if br["overall"] >= 40 else "Weak Match"
 
@@ -632,6 +651,7 @@ with tab2:
                         <span style='color:{oc};font-size:1.1rem;font-weight:800;'>{br['overall']}%</span>
                         <span style='color:{oc};font-size:.75rem;margin-left:6px;'>{verdict}</span>
                     </div>
+                    <div class='score-bar'><span style='width:{br['overall']}%;background:{oc};color:{oc};'></span></div>
                     <span style='font-size:.75rem;color:#a89bb8;'>
                         TF-IDF: <b style='color:#f0eeff'>{br['tfidf']}%</b> &nbsp;|&nbsp;
                         Keywords: <b style='color:#f0eeff'>{br['kw']}%</b> &nbsp;|&nbsp;
@@ -644,14 +664,14 @@ with tab2:
 
             # Best match deep-dive
             best = batch_results[0]
-            st.markdown(f"### 🔬 Best Match Deep-Dive: {best['title']}")
+            st.markdown(f"### Best Match Deep-Dive: {best['title']}")
             bc1, bc2 = st.columns(2)
             with bc1:
-                st.markdown("**✅ Matched Skills**")
+                st.markdown("**Matched Skills**")
                 tags = " ".join([f"<span class='tag-matched'>{html.escape(s)}</span>" for s in best["matched_list"]])
                 st.markdown(tags or "<span class='tag-missing'>None</span>", unsafe_allow_html=True)
             with bc2:
-                st.markdown("**❌ Missing Skills**")
+                st.markdown("**Missing Skills**")
                 tags = " ".join([f"<span class='tag-missing'>{html.escape(s)}</span>" for s in best["missing_list"]])
                 st.markdown(tags or "<span class='tag-matched'>All covered!</span>", unsafe_allow_html=True)
 
@@ -689,7 +709,8 @@ with tab3:
     if st.session_state.get("bulk_signature") != bulk_signature:
         st.session_state.pop("bulk_results", None)
 
-    bulk_run = st.button("✦  Analyze Resume Set", key="bulk_analyze", type="primary")
+    bulk_run = st.button("Analyze Resume Set", key="bulk_analyze", type="primary", use_container_width=True)
+    st.caption("First run after idle can take 1-2 minutes while the model loads. Click once and wait.")
     if bulk_run:
         st.session_state.pop("bulk_results", None)
         if not bulk_jd_text.strip():
