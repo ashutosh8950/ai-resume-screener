@@ -58,7 +58,7 @@ def _read_pdf(uploaded_file, label: str) -> tuple[str, int]:
 
 def _render_match_group(title: str, pairs: list[dict], empty_message: str) -> None:
     status_class = title.lower().replace(" ", "-")
-    st.markdown(f'<div class="evidence-heading {status_class}">{html.escape(title)} <span style="color:#8f849e;font-size:.7rem;font-weight:600;">{len(pairs)} found</span></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="evidence-heading result-reveal reveal-delay-3 {status_class}">{html.escape(title)} <span style="color:#8f849e;font-size:.7rem;font-weight:600;">{len(pairs)} found</span></div>', unsafe_allow_html=True)
     if not pairs:
         st.caption(empty_message)
         return
@@ -133,25 +133,35 @@ h2 { font-size:clamp(1.45rem, 2.5vw, 2.15rem)!important; }
 hr { border-color:rgba(168,85,247,.18)!important; }
 @keyframes gridDrift { from { background-position:0 0, 0 0; } to { background-position:0 42px, 42px 0; } }
 @keyframes ambientFloat { from { transform:translate3d(0,0,0) scale(1); } to { transform:translate3d(-2rem,1.5rem,0) scale(1.08); } }
+@property --scanner-angle { syntax:"<angle>"; inherits:false; initial-value:0deg; }
+@keyframes scannerSpin { to { --scanner-angle:360deg; } }
+@keyframes scannerDot { 0%,100% { transform:scale(.8); opacity:.7; } 50% { transform:scale(1.25); opacity:1; } }
+@keyframes resultRingReveal { from { opacity:0; transform:scale(.82); } to { opacity:1; transform:scale(1); } }
+@keyframes spinnerSweep { from { background-position:200% 0; } to { background-position:-200% 0; } }
+@keyframes resultReveal { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
 .app-hero { position:relative; overflow:hidden; margin:0 0 1.25rem; padding:1.18rem 1.55rem 1.05rem; border:1px solid rgba(168,85,247,.28); border-radius:18px; background:linear-gradient(135deg, rgba(22,12,38,.92), rgba(12,9,20,.78)); box-shadow:0 0 46px rgba(124,58,237,.10), inset 0 1px rgba(255,255,255,.05); animation:heroRise .7s ease both; }
-.app-hero::after { content:""; position:absolute; width:8rem; height:8rem; right:7%; top:1.15rem; border:1px solid rgba(232,121,249,.28); border-radius:50%; box-shadow:0 0 0 1rem rgba(168,85,247,.035), 0 0 45px rgba(168,85,247,.16); animation:orbPulse 4s ease-in-out infinite; }
+.app-hero::after { content:""; position:absolute; width:8rem; height:8rem; right:7%; top:1.15rem; border-radius:50%; background:conic-gradient(from var(--scanner-angle), #7c3aed, #a855f7, #e879f9, rgba(168,85,247,.2), #7c3aed); -webkit-mask:radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px)); mask:radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px)); box-shadow:0 0 0 1rem rgba(168,85,247,.035), 0 0 45px rgba(168,85,247,.2); animation:scannerSpin 8s linear infinite; }
+.app-hero::before { content:""; position:absolute; width:8px; height:8px; right:calc(7% + 3.75rem); top:calc(1.15rem + 3.75rem); border-radius:50%; background:#e879f9; box-shadow:0 0 16px 4px rgba(232,121,249,.45); animation:scannerDot 2.2s ease-in-out infinite; }
 .app-kicker { color:#e879f9; font:700 .68rem/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing:.16em; text-transform:uppercase; margin-bottom:.65rem; }
 .app-title { margin:0!important; font-size:clamp(1.8rem, 4vw, 3rem)!important; font-weight:800!important; }
 .app-title span { color:#e879f9; text-shadow:0 0 22px rgba(232,121,249,.32); }
 .app-subtitle { color:#aaa2ba; font-size:.9rem; line-height:1.7; margin:.5rem 0 0; max-width:880px; }
 @keyframes heroRise { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
-@keyframes orbPulse { 0%,100% { transform:scale(.94); opacity:.65; } 50% { transform:scale(1.05); opacity:1; } }
 .section-kicker { color:#c084fc; font:700 .64rem/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing:.16em; text-transform:uppercase; margin:1.4rem 0 .35rem; }
 .dashboard-heading { color:#f7f3ff; font-size:1.25rem; font-weight:750; margin:.05rem 0 .35rem; }
 .dashboard-copy { color:#8f849e; font-size:.82rem; line-height:1.6; margin:0 0 1rem; }
 .input-label { color:#e879f9; font:700 .68rem/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing:.14em; margin:.25rem 0 .55rem; }
 .input-hint { color:#756b86; font-size:.72rem; line-height:1.5; margin:-.3rem 0 .7rem; }
 .result-hero { display:flex; align-items:center; justify-content:space-between; gap:1rem; margin:.4rem 0 1.1rem; padding:1rem 1.2rem; border:1px solid rgba(168,85,247,.3); border-radius:15px; background:linear-gradient(110deg, rgba(39,18,63,.78), rgba(17,11,28,.84)); box-shadow:0 14px 34px rgba(73,32,125,.14); }
+.result-hero.tier-strong { --tier-color:#6ee7b7; }
+.result-hero.tier-moderate { --tier-color:#fbbf24; }
+.result-hero.tier-weak { --tier-color:#f472b6; }
 .result-hero-label { color:#c084fc; font:700 .64rem/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing:.15em; text-transform:uppercase; }
 .result-hero-title { color:#f7f3ff; font-size:1.08rem; font-weight:750; margin:.28rem 0 0; }
 .result-hero-score { color:#e879f9; font-size:2rem; font-weight:850; line-height:1; text-shadow:0 0 24px rgba(232,121,249,.3); }
 .result-hero-score small { display:block; color:#8f849e; font-size:.62rem; font-weight:600; letter-spacing:.08em; text-align:right; text-transform:uppercase; margin-top:.3rem; }
-.result-gauge { display:grid; place-items:center; width:84px; height:84px; flex:0 0 84px; border-radius:50%; background:conic-gradient(#e879f9 var(--score), rgba(168,85,247,.13) 0); box-shadow:0 0 28px rgba(168,85,247,.2); }
+.result-gauge { display:grid; place-items:center; width:84px; height:84px; flex:0 0 84px; border-radius:50%; box-shadow:0 0 28px rgba(168,85,247,.2); }
+.result-gauge-reveal { animation:resultRingReveal 1.2s ease-out both; animation-fill-mode:both; }
 .result-gauge::after { content:""; grid-area:1/1; width:68px; height:68px; border-radius:50%; background:#130c20; box-shadow:inset 0 0 14px rgba(0,0,0,.45); }
 .result-gauge-value { grid-area:1/1; z-index:1; color:#f7f3ff; font-size:1.05rem; font-weight:850; }
 .sidebar-brand { padding:.2rem 0 1rem; border-bottom:1px solid rgba(168,85,247,.18); margin-bottom:1rem; }
@@ -192,6 +202,17 @@ hr { border-color:rgba(168,85,247,.18)!important; }
 .brand-footer a { color:#e879f9; text-decoration:none; margin-left:.8rem; }
 .brand-footer a:hover { text-decoration:underline; }
 .dashboard-divider { height:1px; margin:1.5rem 0; background:linear-gradient(90deg, transparent, rgba(168,85,247,.38), transparent); }
+.result-reveal { animation:resultReveal .5s ease-out both; }
+.reveal-delay-1 { animation-delay:0ms; }
+.reveal-delay-2 { animation-delay:100ms; }
+.reveal-delay-3 { animation-delay:200ms; }
+.reveal-delay-4 { animation-delay:300ms; }
+.reveal-delay-5 { animation-delay:400ms; }
+.skill-panel .tag-matched, .skill-panel .tag-missing { animation:resultReveal .45s ease-out both; }
+.skill-panel .tag-matched:nth-child(2), .skill-panel .tag-missing:nth-child(2) { animation-delay:80ms; }
+.skill-panel .tag-matched:nth-child(3), .skill-panel .tag-missing:nth-child(3) { animation-delay:160ms; }
+.skill-panel .tag-matched:nth-child(4), .skill-panel .tag-missing:nth-child(4) { animation-delay:240ms; }
+.skill-panel .tag-matched:nth-child(5), .skill-panel .tag-missing:nth-child(5) { animation-delay:320ms; }
 .insight-note { padding:.75rem .9rem; border-left:2px solid #a855f7; border-radius:0 9px 9px 0; background:rgba(168,85,247,.06); color:#b8acc8; font-size:.78rem; line-height:1.6; }
 .skill-panel { min-height:86px; padding:.9rem; border:1px solid rgba(168,85,247,.18); border-radius:12px; background:rgba(16,11,27,.55); }
 .skill-panel-title { color:#f7f3ff; font-size:.78rem; font-weight:750; margin-bottom:.45rem; }
@@ -247,8 +268,14 @@ div[data-testid="stExpander"] summary:hover { color:#e879f9!important; }
 [data-testid="stSidebar"] td { color:#c7bdd2!important; border-color:rgba(168,85,247,.18)!important; }
 [data-testid="stSidebar"] tr:hover td { background:rgba(168,85,247,.08)!important; }
 [data-testid="stDataFrame"] { border:1px solid rgba(168,85,247,.2); border-radius:12px; overflow:hidden; box-shadow:0 10px 28px rgba(0,0,0,.18); }
-[data-testid="stPlotlyChart"] { border:1px solid rgba(168,85,247,.18); border-radius:14px; padding:.35rem; background:rgba(12,8,20,.58); }
+[data-testid="stDataFrame"] ::-webkit-scrollbar-corner, [data-testid="stDataFrame"]::-webkit-scrollbar-corner { background:transparent!important; }
+[data-testid="stPlotlyChart"] { border:1px solid rgba(168,85,247,.18); border-radius:14px; padding:.35rem; background:rgba(12,8,20,.58); animation:resultReveal .5s ease-out 300ms both; }
+[data-testid="stPlotlyChart"] [data-testid="stElementToolbar"], [data-testid="stPlotlyChart"] [data-testid="stElementToolbarButton"] { display:none!important; }
 .stAlert { border-radius:11px!important; border:1px solid rgba(168,85,247,.24)!important; background:rgba(25,15,40,.76)!important; }
+.stSpinner { color:#b8acc8!important; }
+div[data-testid="stSpinner"] { display:flex!important; align-items:center; gap:.65rem; color:#b8acc8!important; }
+div[data-testid="stSpinner"] svg { display:none!important; }
+div[data-testid="stSpinner"]::before { content:""; width:110px; height:2px; flex:0 0 110px; border-radius:999px; background:linear-gradient(90deg, transparent, #a855f7 35%, #e879f9 50%, transparent 65%); background-size:200% 100%; animation:spinnerSweep 1.15s linear infinite; box-shadow:0 0 12px rgba(168,85,247,.6); }
 .stCaption, [data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] p { color:#b8acc8!important; }
 .input-meta { display:flex; justify-content:space-between; gap:.75rem; margin:.45rem .2rem .15rem; color:#756b86; font:600 .62rem/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing:.03em; }
 .input-meta strong { color:#c084fc; font-weight:700; }
@@ -260,6 +287,12 @@ div[data-testid="stExpander"] summary:hover { color:#e879f9!important; }
 .stTextArea:focus-within { border-color:rgba(232,121,249,.42); box-shadow:0 0 22px rgba(168,85,247,.10), inset 0 1px rgba(255,255,255,.03); }
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration:.01ms!important; animation-iteration-count:1!important; transition-duration:.01ms!important; scroll-behavior:auto!important; }
+    .app-hero::before, .app-hero::after, .result-gauge-reveal, div[data-testid="stSpinner"]::before, .result-reveal, .skill-panel .tag-matched, .skill-panel .tag-missing { animation:none!important; }
+    .app-hero::before { transform:scale(1); opacity:1; }
+    .app-hero::after { --scanner-angle:0deg; }
+    .result-gauge-reveal { opacity:1!important; transform:none!important; }
+    .result-reveal, .skill-panel .tag-matched, .skill-panel .tag-missing { opacity:1!important; transform:none!important; }
+    div[data-testid="stSpinner"]::before { background:#a855f7; }
 }
 @media (max-width: 768px) {
     .block-container { padding:1.3rem 1rem 3rem; }
@@ -396,15 +429,15 @@ with tab1:
                 return "#f472b6"
 
             c1, c2, c3, c4, c5 = st.columns(5)
-            for col, label, val, sub in [
+            for tile_index, (col, label, val, sub) in enumerate([
                 (c1, "TF-IDF Similarity",   tfidf_pct,   "term importance"),
                 (c2, "Keyword Match",        kw_pct,      "ATS simulation"),
                 (c3, "Semantic Coverage",    semantic_pct, "requirement-level match"),
                 (c4, "Skill Coverage",       skill_pct, "technical skills present"),
                 (c5, "Overall Score",        overall_pct, "weighted average"),
-            ]:
+            ], start=1):
                 with col:
-                    st.markdown(f"""<div class='score-box'>
+                    st.markdown(f"""<div class='score-box result-reveal reveal-delay-{tile_index}'>
                         <div class='score-number' style='color:{sc(val)}'>{val}%</div>
                         <div class='score-label'>{label}</div>
                         <div class='score-sub'>{sub}</div>
@@ -412,32 +445,29 @@ with tab1:
 
             if overall_pct >= 65:
                 match_label = "Strong role alignment"
+                tier_label = "Strong Match"
+                tier_class = "tier-strong"
+                tier_color = "#6ee7b7"
             elif overall_pct >= 40:
                 match_label = "Moderate role alignment"
+                tier_label = "Moderate Match"
+                tier_class = "tier-moderate"
+                tier_color = "#fbbf24"
             else:
                 match_label = "Role alignment needs work"
+                tier_label = "Weak Match"
+                tier_class = "tier-weak"
+                tier_color = "#f472b6"
 
-            st.markdown(f"""<div class='result-hero'>
-                <div><div class='result-hero-label'>Decision signal</div><div class='result-hero-title'>{match_label}</div><div class='result-hero-note'>Weighted fit across semantic evidence, skills, keywords, and TF-IDF.</div><div class='analysis-status'>Evidence profile generated</div></div>
-                <div class='result-gauge' style='--score:{overall_pct}%;'><div class='result-gauge-value'>{overall_pct}%</div></div>
+            st.markdown(f"""<div class='result-hero {tier_class} result-reveal reveal-delay-2'>
+                <div><div class='result-hero-label'>Decision signal</div><div class='result-hero-title'>{tier_label} <span style='color:var(--tier-color);font-size:.78rem;font-weight:600;'>· {match_label}</span></div><div class='result-hero-note'>Weighted fit across semantic evidence, skills, keywords, and TF-IDF.</div><div class='analysis-status'>Evidence profile generated</div></div>
+                <div class='result-gauge result-gauge-reveal' style='background:conic-gradient({tier_color} {overall_pct * 3.6}deg, rgba(168,85,247,.13) 0);'><div class='result-gauge-value'>{overall_pct}%</div></div>
             </div>""", unsafe_allow_html=True)
-
-            # Verdict
-            if overall_pct >= 65:
-                vs = "background:rgba(74,222,170,.10);border:1px solid rgba(74,222,170,.35);color:#6ee7b7;"
-                vt = "Strong Match — great alignment with this role!"
-            elif overall_pct >= 40:
-                vs = "background:rgba(251,191,36,.10);border:1px solid rgba(251,191,36,.35);color:#fbbf24;"
-                vt = "⚠️ Moderate Match — a few gaps to address."
-            else:
-                vs = "background:rgba(244,114,182,.10);border:1px solid rgba(244,114,182,.35);color:#f472b6;"
-                vt = "Weak Match — significant improvements needed."
-            st.markdown(f"<div class='verdict-box' style='{vs}'>{vt}</div>", unsafe_allow_html=True)
 
             if not results["embeddings_used"]:
                 st.info(results["embedding_message"])
 
-            st.markdown('<div class="section-kicker">Evidence layer</div><div class="dashboard-heading">Why this score</div><p class="dashboard-copy">Trace the strongest evidence, partial matches, and gaps behind the result.</p>', unsafe_allow_html=True)
+            st.markdown('<div class="section-kicker result-reveal reveal-delay-3">Evidence layer</div><div class="dashboard-heading result-reveal reveal-delay-3">Why this score</div><p class="dashboard-copy result-reveal reveal-delay-3">Trace the strongest evidence, partial matches, and gaps behind the result.</p>', unsafe_allow_html=True)
             if results["embeddings_used"]:
                 _render_match_group("Strong", results["strong_matches"], "No strong matches.")
                 _render_match_group("Partial", results["partial_matches"], "No partial matches.")
@@ -478,16 +508,16 @@ with tab1:
                 )
 
             # Skill gap
-            st.markdown('<div class="section-kicker">Capability map</div><div class="dashboard-heading">Skill gap analysis</div><p class="dashboard-copy">See which technical skills are already supported and which ones need stronger evidence.</p>', unsafe_allow_html=True)
+            st.markdown('<div class="section-kicker result-reveal reveal-delay-4">Capability map</div><div class="dashboard-heading result-reveal reveal-delay-4">Skill gap analysis</div><p class="dashboard-copy result-reveal reveal-delay-4">See which technical skills are already supported and which ones need stronger evidence.</p>', unsafe_allow_html=True)
             sk1, sk2 = st.columns(2)
             with sk1:
                 tags = " ".join([f"<span class='tag-matched'>{html.escape(s)}</span>" for s in results["matched_skills"]])
                 matched_content = tags or "<span class='tag-missing'>None detected</span>"
-                st.markdown(f'<div class="skill-panel"><div class="skill-panel-title">Matched skills</div>{matched_content}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="skill-panel result-reveal reveal-delay-5"><div class="skill-panel-title">Matched skills</div>{matched_content}</div>', unsafe_allow_html=True)
             with sk2:
                 tags = " ".join([f"<span class='tag-missing'>{html.escape(s)}</span>" for s in results["missing_skills"]])
                 missing_content = tags or "<span class='tag-matched'>All covered!</span>"
-                st.markdown(f'<div class="skill-panel"><div class="skill-panel-title">Missing skills</div>{missing_content}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="skill-panel result-reveal reveal-delay-5"><div class="skill-panel-title">Missing skills</div>{missing_content}</div>', unsafe_allow_html=True)
 
             st.markdown('<div class="section-kicker">Action plan</div><div class="dashboard-heading">Improvement suggestions</div><p class="dashboard-copy">Turn the detected gaps into concrete resume improvements.</p>', unsafe_allow_html=True)
             with st.spinner("Preparing improvement suggestions..."):
