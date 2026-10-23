@@ -87,7 +87,8 @@ def plot_skill_chart(matched: list, missing: list) -> go.Figure:
 
 
 def plot_batch_chart(batch_results: list) -> go.Figure:
-    titles = [result["title"][:28] + ("…" if len(result["title"]) > 28 else "") for result in batch_results]
+    full_titles = [result["title"] for result in batch_results]
+    titles = [title.split("@", 1)[0].strip() for title in full_titles]
     series = [
         ("TF-IDF", [result["tfidf"] for result in batch_results], TFIDF),
         ("Keywords", [result["kw"] for result in batch_results], KEYWORDS),
@@ -101,11 +102,13 @@ def plot_batch_chart(batch_results: list) -> go.Figure:
             name=name,
             x=titles,
             y=values,
+            customdata=full_titles,
             marker=dict(color=color, line=dict(width=0)),
             text=[f"{value}%" for value in values],
             textposition="outside",
             textfont=dict(size=10, color=TEXT),
             cliponaxis=False,
+            hovertemplate="%{customdata}<br>%{y}%<extra>%{fullData.name}</extra>",
         ))
     fig.update_layout(
         **_base("Job Comparison"),

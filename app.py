@@ -9,11 +9,10 @@ Streamlit UI with three new features:
 import gc
 import html
 
-import pandas as pd
 import streamlit as st
 
 from resume_screener.analyzer import ResumeAnalyzer
-from resume_screener.bulk import build_ranked_csv, check_upload_limits, rank_results
+from resume_screener.bulk import build_ranked_csv, check_upload_limits, rank_batch_results, rank_results
 from resume_screener.config import (
     FALLBACK_KEYWORD_WEIGHT,
     FALLBACK_SKILL_WEIGHT,
@@ -31,6 +30,8 @@ from resume_screener.embeddings import get_available_memory_mb
 from resume_screener.logger import get_logger
 from resume_screener.pdf_parser import PDFParseError, PDFParser
 from resume_screener.suggestions import suggestions_for_analysis
+from resume_screener.text_utils import clean_jd_text
+from resume_screener.ui_helpers import build_evidence_table_html, build_leaderboard_html
 from resume_screener.visualizer import plot_batch_chart, plot_score_breakdown, plot_skill_chart
 
 
@@ -42,6 +43,20 @@ def _limit_text(text: str, label: str) -> str:
         st.warning(f"{label} exceeded {MAX_TEXT_CHARS:,} characters and was truncated.")
         return text[:MAX_TEXT_CHARS]
     return text
+
+
+def _clean_jd_widget_state(key: str) -> None:
+    """Normalize pasted or extracted JD text before Streamlit redraws the widget."""
+    current = st.session_state.get(key, "")
+    cleaned = clean_jd_text(current)
+    if cleaned != current:
+        st.session_state[key] = cleaned
+
+
+def _normalize_jd_widget_state(key: str) -> None:
+    """Clean an already-populated JD widget state before it is rendered."""
+    if key in st.session_state:
+        st.session_state[key] = clean_jd_text(st.session_state[key])
 
 
 def _read_pdf(uploaded_file, label: str) -> tuple[str, int]:
@@ -64,44 +79,17 @@ def _render_match_group(title: str, pairs: list[dict], empty_message: str) -> No
         return
 
     def render_table(rows: list[dict]) -> None:
-        rendered_rows = []
-        for pair in rows:
-            note_parts = [pair.get("status_reason", ""), f"cosine {pair['raw_score']:.2f}"]
-            if pair.get("optional"):
-                note_parts.insert(0, "Optional · weight 0.5")
-            note = ". ".join(part.strip().rstrip(".") for part in note_parts if part.strip())
-            rendered_rows.append(
-                {
-                    "Requirement": pair["requirement"],
-                    "Score": f"{pair['status']} · {pair['score']:.0%}",
-                    "Section": pair["section"],
-                    "Best evidence": pair["evidence"] or "No eligible resume evidence",
-                    "Note": note,
-                }
-            )
-        frame = pd.DataFrame(
-            rendered_rows,
-            columns=["Requirement", "Score", "Section", "Best evidence", "Note"],
-        )
-        st.dataframe(
-            frame,
-            use_container_width=True,
-            hide_index=True,
-            height=38 + 35 * len(frame),
-            column_config={
-                "Requirement": st.column_config.TextColumn(width="large"),
-                "Score": st.column_config.TextColumn(width=160),
-                "Section": st.column_config.TextColumn(width="medium"),
-                "Best evidence": st.column_config.TextColumn(width="large"),
-                "Note": st.column_config.TextColumn(width="large"),
-            },
-        )
+        st.markdown(build_evidence_table_html(title, rows), unsafe_allow_html=True)
 
     render_table(pairs[:8])
 
     if len(pairs) > 8:
         with st.expander(f"Show {len(pairs) - 8} more {title.lower()} matches"):
             render_table(pairs[8:])
+
+
+def _render_bulk_leaderboard(rows: list[dict]) -> None:
+    st.markdown(build_leaderboard_html(rows), unsafe_allow_html=True)
 
 st.set_page_config(page_title="AI Resume Screener v2", layout="wide")
 
@@ -141,7 +129,6 @@ hr { border-color:rgba(168,85,247,.18)!important; }
 @keyframes resultReveal { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
 .app-hero { position:relative; overflow:hidden; margin:0 0 1.25rem; padding:1.18rem 1.55rem 1.05rem; border:1px solid rgba(168,85,247,.28); border-radius:18px; background:linear-gradient(135deg, rgba(22,12,38,.92), rgba(12,9,20,.78)); box-shadow:0 0 46px rgba(124,58,237,.10), inset 0 1px rgba(255,255,255,.05); animation:heroRise .7s ease both; }
 .app-hero::after { content:""; position:absolute; width:8rem; height:8rem; right:7%; top:1.15rem; border-radius:50%; background:conic-gradient(from var(--scanner-angle), #7c3aed, #a855f7, #e879f9, rgba(168,85,247,.2), #7c3aed); -webkit-mask:radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px)); mask:radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px)); box-shadow:0 0 0 1rem rgba(168,85,247,.035), 0 0 45px rgba(168,85,247,.2); animation:scannerSpin 8s linear infinite; }
-.app-hero::before { content:""; position:absolute; width:8px; height:8px; right:calc(7% + 3.75rem); top:calc(1.15rem + 3.75rem); border-radius:50%; background:#e879f9; box-shadow:0 0 16px 4px rgba(232,121,249,.45); animation:scannerDot 2.2s ease-in-out infinite; }
 .app-kicker { color:#e879f9; font:700 .68rem/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing:.16em; text-transform:uppercase; margin-bottom:.65rem; }
 .app-title { margin:0!important; font-size:clamp(1.8rem, 4vw, 3rem)!important; font-weight:800!important; }
 .app-title span { color:#e879f9; text-shadow:0 0 22px rgba(232,121,249,.32); }
@@ -239,7 +226,7 @@ hr { border-color:rgba(168,85,247,.18)!important; }
                 border-radius:20px; padding:3px 11px; font-size:.76rem; display:inline-block; margin:3px; }
 .batch-title  { font-size:.88rem; font-weight:600; color:#f7f3ff; margin-bottom:.4rem; }
 .score-bar { width:100%; height:4px; margin:.2rem 0 .75rem; overflow:hidden; border-radius:999px; background:rgba(168,85,247,.12); }
-.score-bar span { display:block; height:100%; border-radius:inherit; box-shadow:0 0 10px currentColor; }
+.score-bar span { display:block; width:100%; max-width:100%; min-width:0; height:100%; border-radius:inherit; box-shadow:none; }
 .stTextArea textarea, .stTextInput input, [data-baseweb="input"] input { background:rgba(13,10,23,.88)!important; color:#f7f3ff!important; border:1px solid rgba(168,85,247,.25)!important; border-radius:11px!important; font-size:.85rem!important; transition:border-color .2s ease, box-shadow .2s ease; }
 .stTextArea [data-baseweb="base-input"], .stTextInput [data-baseweb="base-input"], [data-baseweb="input"] { background:rgba(13,10,23,.88)!important; border-color:rgba(168,85,247,.25)!important; }
 .stTextArea textarea::placeholder, .stTextInput input::placeholder { color:#b8acc8!important; opacity:1!important; }
@@ -269,6 +256,25 @@ div[data-testid="stExpander"] summary:hover { color:#e879f9!important; }
 [data-testid="stSidebar"] tr:hover td { background:rgba(168,85,247,.08)!important; }
 [data-testid="stDataFrame"] { border:1px solid rgba(168,85,247,.2); border-radius:12px; overflow:hidden; box-shadow:0 10px 28px rgba(0,0,0,.18); }
 [data-testid="stDataFrame"] ::-webkit-scrollbar-corner, [data-testid="stDataFrame"]::-webkit-scrollbar-corner { background:transparent!important; }
+.evidence-table-wrap { overflow-x:auto; border:1px solid rgba(168,85,247,.18); border-radius:12px; background:rgba(12,8,20,.58); }
+.evidence-table, .leaderboard-table { width:100%; border-collapse:collapse; color:#c7bdd2; font-size:.78rem; }
+.evidence-table th, .evidence-table td { padding:.7rem .75rem; border-bottom:1px solid rgba(168,85,247,.12); text-align:left; vertical-align:top; white-space:normal; overflow-wrap:anywhere; }
+.evidence-table th:nth-child(3), .evidence-table td:nth-child(3) { min-width:110px; word-break:normal; overflow-wrap:normal; }
+.evidence-table th { color:#e879f9; background:rgba(168,85,247,.09); font-size:.68rem; letter-spacing:.08em; text-transform:uppercase; }
+.evidence-table tr:last-child td { border-bottom:0; }
+.evidence-score-cell { min-width:120px; }
+.evidence-score-label { font-weight:750; white-space:nowrap; }
+.evidence-score-bar, .leaderboard-score-bar { height:4px; margin-top:.35rem; overflow:hidden; border-radius:999px; background:rgba(168,85,247,.12); }
+.evidence-score-bar span, .leaderboard-score-bar span { display:block; height:100%; border-radius:inherit; }
+.leaderboard-wrap { overflow-x:auto; border:1px solid rgba(168,85,247,.22); border-radius:14px; background:rgba(12,8,20,.58); }
+.leaderboard-table th, .leaderboard-table td { padding:.72rem .8rem; border-bottom:1px solid rgba(168,85,247,.13); text-align:left; vertical-align:middle; white-space:normal; }
+.leaderboard-table th { color:#e879f9; background:rgba(168,85,247,.1); font-size:.67rem; letter-spacing:.08em; text-transform:uppercase; }
+.leaderboard-table tr:last-child td { border-bottom:0; }
+.leaderboard-rank { color:#c084fc; font-weight:850; white-space:nowrap; }
+.leaderboard-name { color:#f7f3ff; font-weight:700; min-width:180px; overflow-wrap:anywhere; }
+.leaderboard-score { min-width:150px; font-weight:800; white-space:nowrap; }
+.leaderboard-chip { display:inline-block; margin:2px 3px 2px 0; padding:3px 7px; border:1px solid rgba(168,85,247,.28); border-radius:999px; color:#d8b4fe; background:rgba(168,85,247,.1); font-size:.66rem; white-space:nowrap; }
+.leaderboard-chip.missing { color:#f9a8d4; border-color:rgba(244,114,182,.36); background:rgba(244,114,182,.1); }
 [data-testid="stPlotlyChart"] { border:1px solid rgba(168,85,247,.18); border-radius:14px; padding:.35rem; background:rgba(12,8,20,.58); animation:resultReveal .5s ease-out 300ms both; }
 [data-testid="stPlotlyChart"] [data-testid="stElementToolbar"], [data-testid="stPlotlyChart"] [data-testid="stElementToolbarButton"] { display:none!important; }
 .stAlert { border-radius:11px!important; border:1px solid rgba(168,85,247,.24)!important; background:rgba(25,15,40,.76)!important; }
@@ -287,8 +293,7 @@ div[data-testid="stSpinner"]::before { content:""; width:110px; height:2px; flex
 .stTextArea:focus-within { border-color:rgba(232,121,249,.42); box-shadow:0 0 22px rgba(168,85,247,.10), inset 0 1px rgba(255,255,255,.03); }
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration:.01ms!important; animation-iteration-count:1!important; transition-duration:.01ms!important; scroll-behavior:auto!important; }
-    .app-hero::before, .app-hero::after, .result-gauge-reveal, div[data-testid="stSpinner"]::before, .result-reveal, .skill-panel .tag-matched, .skill-panel .tag-missing { animation:none!important; }
-    .app-hero::before { transform:scale(1); opacity:1; }
+    .app-hero::after, .result-gauge-reveal, div[data-testid="stSpinner"]::before, .result-reveal, .skill-panel .tag-matched, .skill-panel .tag-missing { animation:none!important; }
     .app-hero::after { --scanner-angle:0deg; }
     .result-gauge-reveal { opacity:1!important; transform:none!important; }
     .result-reveal, .skill-panel .tag-matched, .skill-panel .tag-missing { opacity:1!important; transform:none!important; }
@@ -393,10 +398,12 @@ with tab1:
     # ── JD input ──────────────────────────────────────────────────────────────
     with col2:
         st.markdown('<div class="input-label">TARGET ROLE</div><div class="input-hint">Paste the role requirements you want to evaluate against.</div>', unsafe_allow_html=True)
+        _normalize_jd_widget_state("jd_ta")
         jd_text = st.text_area("", height=280,
             placeholder="Paste the job description here...", key="jd_ta",
-            label_visibility="collapsed")
-        jd_text = _limit_text(jd_text, "Job description")
+            label_visibility="collapsed", on_change=_clean_jd_widget_state,
+            args=("jd_ta",))
+        jd_text = _limit_text(clean_jd_text(jd_text), "Job description")
         st.markdown(f'<div class="input-meta"><span><strong>{len(jd_text.split())}</strong> words</span><span>{len(jd_text):,} characters</span></div>', unsafe_allow_html=True)
 
     analyze_btn = st.button("Run Match Analysis", key="analyze_single", type="primary", use_container_width=True)
@@ -618,10 +625,12 @@ with tab2:
         with st.expander(f"Job {i+1}", expanded=(i < 2)):
             title = st.text_input(f"Job title / company", key=f"jd_title_{i}",
                                   placeholder=f"e.g. ML Engineer @ Google")
+            _normalize_jd_widget_state(f"jd_text_{i}")
             text  = st.text_area("Job description", height=150, key=f"jd_text_{i}",
                                   placeholder="Paste job description here...",
-                                  label_visibility="collapsed")
-            text = _limit_text(text, f"Job {i + 1} description")
+                                  label_visibility="collapsed", on_change=_clean_jd_widget_state,
+                                  args=(f"jd_text_{i}",))
+            text = _limit_text(clean_jd_text(text), f"Job {i + 1} description")
             jd_entries.append({"title": title or f"Job {i+1}", "text": text})
 
     batch_btn = st.button("Rank Job Matches", key="batch_run", type="primary", use_container_width=True)
@@ -644,10 +653,13 @@ with tab2:
                     batch_results.append({
                         "title":   title,
                         "overall": int(r["overall_score"] * 100),
+                        "_overall_score": r["overall_score"],
                         "tfidf":   int(r["tfidf_score"]   * 100),
                         "kw":      int(r["keyword_score"] * 100),
                         "semantic": int(r["semantic_score"] * 100),
+                        "_semantic_score": r["semantic_score"],
                         "skill_coverage": int(r["skill_coverage"] * 100),
+                        "_skill_coverage_score": r["skill_coverage"],
                         "matched": len(r["matched_skills"]),
                         "missing": len(r["missing_skills"]),
                         "matched_list": r["matched_skills"],
@@ -657,8 +669,8 @@ with tab2:
 
             progress.empty()
 
-            # Sort by overall score
-            batch_results.sort(key=lambda x: x["overall"], reverse=True)
+            # Sort by precise score, then skill coverage, then semantic coverage.
+            batch_results = rank_batch_results(batch_results)
 
             st.divider()
             st.markdown("### Ranking — Best Matched Roles")
@@ -681,7 +693,7 @@ with tab2:
                         <span style='color:{oc};font-size:1.1rem;font-weight:800;'>{br['overall']}%</span>
                         <span style='color:{oc};font-size:.75rem;margin-left:6px;'>{verdict}</span>
                     </div>
-                    <div class='score-bar'><span style='width:{br['overall']}%;background:{oc};color:{oc};'></span></div>
+                    <div class='score-bar'><span style='width:{br['overall']}%;background:{oc};'></span></div>
                     <span style='font-size:.75rem;color:#a89bb8;'>
                         TF-IDF: <b style='color:#f0eeff'>{br['tfidf']}%</b> &nbsp;|&nbsp;
                         Keywords: <b style='color:#f0eeff'>{br['kw']}%</b> &nbsp;|&nbsp;
@@ -691,6 +703,20 @@ with tab2:
                         Missing: <b style='color:#f472b6'>{br['missing']}</b>
                     </span>
                 </div>""", unsafe_allow_html=True)
+
+                with st.expander(f"Skills for {br['title']}", expanded=False):
+                    st.markdown("**Matched Skills**")
+                    matched_tags = " ".join(
+                        f"<span class='tag-matched'>{html.escape(str(skill))}</span>"
+                        for skill in br["matched_list"]
+                    )
+                    st.markdown(matched_tags or "<span class='tag-missing'>None</span>", unsafe_allow_html=True)
+                    st.markdown("**Missing Skills**")
+                    missing_tags = " ".join(
+                        f"<span class='tag-missing'>{html.escape(str(skill))}</span>"
+                        for skill in br["missing_list"]
+                    )
+                    st.markdown(missing_tags or "<span class='tag-matched'>All covered!</span>", unsafe_allow_html=True)
 
             # Best match deep-dive
             best = batch_results[0]
@@ -711,14 +737,17 @@ with tab2:
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab3:
     st.markdown("### Bulk Resumes - Compare Multiple Resumes Against One Job")
+    _normalize_jd_widget_state("bulk_jd_ta")
     bulk_jd_text = st.text_area(
         "Job description",
         height=220,
         key="bulk_jd_ta",
         placeholder="Paste the job description here...",
         label_visibility="collapsed",
+        on_change=_clean_jd_widget_state,
+        args=("bulk_jd_ta",),
     )
-    bulk_jd_text = _limit_text(bulk_jd_text, "Job description")
+    bulk_jd_text = _limit_text(clean_jd_text(bulk_jd_text), "Job description")
     bulk_files = st.file_uploader(
         "Resume PDFs (up to 10 files, 5 MB each)",
         type=["pdf"],
@@ -783,8 +812,11 @@ with tab3:
                             "_detail_id": file_index,
                             "file_name": file_name,
                             "overall_pct": round(analysis["overall_score"] * 100),
+                            "_overall_score": analysis["overall_score"],
                             "semantic_pct": round(analysis["semantic_score"] * 100),
+                            "_semantic_score": analysis["semantic_score"],
                             "skill_coverage_pct": round(analysis["skill_coverage"] * 100),
+                            "_skill_coverage_score": analysis["skill_coverage"],
                             "strong_count": len(analysis["strong_matches"]),
                             "partial_count": len(analysis["partial_matches"]),
                             "gaps_count": len(analysis["gaps"]),
@@ -832,11 +864,7 @@ with tab3:
     bulk_results = st.session_state.get("bulk_results")
     if bulk_results and bulk_results.get("rows"):
         ranked_rows = bulk_results["rows"]
-        st.dataframe(
-            pd.DataFrame(ranked_rows),
-            use_container_width=True,
-            hide_index=True,
-        )
+        _render_bulk_leaderboard(ranked_rows)
         st.download_button(
             "Download ranked results (CSV)",
             data=build_ranked_csv(ranked_rows),
