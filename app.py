@@ -779,87 +779,90 @@ with tab3:
         elif not upload_indices:
             st.error("No uploaded resumes passed the file-size limit.")
         else:
-            analyzer = ResumeAnalyzer()
-            prepared_jd = analyzer.prepare_job_description(
-                bulk_jd_text,
-                precompute_embeddings=True,
-            )
-            rows = []
-            details = {}
-            progress = st.progress(0, text="Analyzing resumes one at a time...")
+            with st.spinner(
+                f"Running semantic, TF-IDF, and keyword analysis on {len(upload_indices)} resumes..."
+            ):
+                analyzer = ResumeAnalyzer()
+                prepared_jd = analyzer.prepare_job_description(
+                    bulk_jd_text,
+                    precompute_embeddings=True,
+                )
+                rows = []
+                details = {}
+                progress = st.progress(0, text="Analyzing resumes one at a time...")
 
-            for processed_index, file_index in enumerate(upload_indices, start=1):
-                uploaded_file = bulk_files[file_index]
-                file_name = uploaded_file.name
-                escaped_name = html.escape(file_name)
-                analysis = None
-                resume_text = ""
-                try:
-                    memory_mb = get_available_memory_mb()
-                    logger.info(
-                        "Available memory before bulk resume %s: %s",
-                        file_name,
-                        f"{memory_mb:.1f} MB" if memory_mb is not None else "unknown",
-                    )
-                    resume_text, _ = _read_pdf(uploaded_file, f"Resume {escaped_name}")
-                    if resume_text:
-                        analysis = analyzer.analyze(
-                            resume_text,
-                            bulk_jd_text,
-                            prepared_job_description=prepared_jd,
+                for processed_index, file_index in enumerate(upload_indices, start=1):
+                    uploaded_file = bulk_files[file_index]
+                    file_name = uploaded_file.name
+                    escaped_name = html.escape(file_name)
+                    analysis = None
+                    resume_text = ""
+                    try:
+                        memory_mb = get_available_memory_mb()
+                        logger.info(
+                            "Available memory before bulk resume %s: %s",
+                            file_name,
+                            f"{memory_mb:.1f} MB" if memory_mb is not None else "unknown",
                         )
-                        row = {
-                            "_detail_id": file_index,
-                            "file_name": file_name,
-                            "overall_pct": round(analysis["overall_score"] * 100),
-                            "_overall_score": analysis["overall_score"],
-                            "semantic_pct": round(analysis["semantic_score"] * 100),
-                            "_semantic_score": analysis["semantic_score"],
-                            "skill_coverage_pct": round(analysis["skill_coverage"] * 100),
-                            "_skill_coverage_score": analysis["skill_coverage"],
-                            "strong_count": len(analysis["strong_matches"]),
-                            "partial_count": len(analysis["partial_matches"]),
-                            "gaps_count": len(analysis["gaps"]),
-                            "top_missing_skills": ", ".join(analysis["missing_skills"][:3]),
-                            "mode": "semantic" if analysis["embeddings_used"] else "fallback",
-                        }
-                        rows.append(row)
-                        details[file_index] = {
-                            "mode": row["mode"],
-                            "embedding_message": analysis["embedding_message"],
-                            "strong_matches": analysis["strong_matches"],
-                            "partial_matches": analysis["partial_matches"],
-                            "gaps": analysis["gaps"],
-                        }
-                except Exception:
-                    logger.exception("Bulk resume analysis failed for %s", file_name)
-                    st.error(f"Could not process {escaped_name}; the other resumes will continue.")
-                finally:
-                    memory_mb = get_available_memory_mb()
-                    logger.info(
-                        "Available memory after bulk resume %s: %s",
-                        file_name,
-                        f"{memory_mb:.1f} MB" if memory_mb is not None else "unknown",
-                    )
-                    del analysis, resume_text, uploaded_file
-                    gc.collect()
-                    progress.progress(
-                        processed_index / len(upload_indices),
-                        text=f"Processed {processed_index} of {len(upload_indices)} files",
-                    )
+                        resume_text, _ = _read_pdf(uploaded_file, f"Resume {escaped_name}")
+                        if resume_text:
+                            analysis = analyzer.analyze(
+                                resume_text,
+                                bulk_jd_text,
+                                prepared_job_description=prepared_jd,
+                            )
+                            row = {
+                                "_detail_id": file_index,
+                                "file_name": file_name,
+                                "overall_pct": round(analysis["overall_score"] * 100),
+                                "_overall_score": analysis["overall_score"],
+                                "semantic_pct": round(analysis["semantic_score"] * 100),
+                                "_semantic_score": analysis["semantic_score"],
+                                "skill_coverage_pct": round(analysis["skill_coverage"] * 100),
+                                "_skill_coverage_score": analysis["skill_coverage"],
+                                "strong_count": len(analysis["strong_matches"]),
+                                "partial_count": len(analysis["partial_matches"]),
+                                "gaps_count": len(analysis["gaps"]),
+                                "top_missing_skills": ", ".join(analysis["missing_skills"][:3]),
+                                "mode": "semantic" if analysis["embeddings_used"] else "fallback",
+                            }
+                            rows.append(row)
+                            details[file_index] = {
+                                "mode": row["mode"],
+                                "embedding_message": analysis["embedding_message"],
+                                "strong_matches": analysis["strong_matches"],
+                                "partial_matches": analysis["partial_matches"],
+                                "gaps": analysis["gaps"],
+                            }
+                    except Exception:
+                        logger.exception("Bulk resume analysis failed for %s", file_name)
+                        st.error(f"Could not process {escaped_name}; the other resumes will continue.")
+                    finally:
+                        memory_mb = get_available_memory_mb()
+                        logger.info(
+                            "Available memory after bulk resume %s: %s",
+                            file_name,
+                            f"{memory_mb:.1f} MB" if memory_mb is not None else "unknown",
+                        )
+                        del analysis, resume_text, uploaded_file
+                        gc.collect()
+                        progress.progress(
+                            processed_index / len(upload_indices),
+                            text=f"Processed {processed_index} of {len(upload_indices)} files",
+                        )
 
-            progress.empty()
-            ranked_rows = rank_results(rows)
-            details_by_rank = {}
-            for row in ranked_rows:
-                details_by_rank[row["rank"]] = details.pop(row.pop("_detail_id"))
-            st.session_state["bulk_signature"] = bulk_signature
-            st.session_state["bulk_results"] = {
-                "rows": ranked_rows,
-                "details": details_by_rank,
-            }
-            del prepared_jd, analyzer, bulk_files
-            gc.collect()
+                progress.empty()
+                ranked_rows = rank_results(rows)
+                details_by_rank = {}
+                for row in ranked_rows:
+                    details_by_rank[row["rank"]] = details.pop(row.pop("_detail_id"))
+                st.session_state["bulk_signature"] = bulk_signature
+                st.session_state["bulk_results"] = {
+                    "rows": ranked_rows,
+                    "details": details_by_rank,
+                }
+                del prepared_jd, analyzer, bulk_files
+                gc.collect()
 
     bulk_results = st.session_state.get("bulk_results")
     if bulk_results and bulk_results.get("rows"):
