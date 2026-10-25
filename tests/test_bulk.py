@@ -8,6 +8,7 @@ from resume_screener.bulk import (
     build_ranked_csv,
     check_upload_limits,
     rank_results,
+    rank_batch_results,
     sanitize_csv_cell,
 )
 
@@ -50,6 +51,27 @@ def test_rank_results_sorts_overall_score_and_assigns_ranks():
     ]
     assert list(ranked[0])[0] == "rank"
     assert "rank" not in rows[0]
+
+
+def test_rank_batch_results_breaks_rounded_overall_ties_precisely():
+    rows = [
+        {
+            "title": "Semantic tie",
+            "overall": 48,
+            "_overall_score": 0.481,
+            "skill_coverage": 0.70,
+            "semantic": 0.80,
+        },
+        {
+            "title": "Skill tie",
+            "overall": 48,
+            "_overall_score": 0.489,
+            "skill_coverage": 0.60,
+            "semantic": 0.90,
+        },
+    ]
+
+    assert [row["title"] for row in rank_batch_results(rows)] == ["Skill tie", "Semantic tie"]
 
 
 def test_build_ranked_csv_uses_ascii_headers_and_sanitizes_text_cells():

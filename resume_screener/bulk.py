@@ -45,9 +45,30 @@ def check_upload_limits(
 
 
 def rank_results(rows: list[dict]) -> list[dict]:
-    """Sort result summaries by overall percentage and add 1-based ranks."""
-    ordered = sorted(rows, key=lambda row: row["overall_pct"], reverse=True)
+    """Sort result summaries by precise score, then skill and semantic coverage."""
+    ordered = sorted(
+        rows,
+        key=lambda row: (
+            row.get("_overall_score", row["overall_pct"] / 100),
+            row.get("_skill_coverage_score", row.get("skill_coverage_pct", 0) / 100),
+            row.get("_semantic_score", row.get("semantic_pct", 0) / 100),
+        ),
+        reverse=True,
+    )
     return [{"rank": index, **row} for index, row in enumerate(ordered, start=1)]
+
+
+def rank_batch_results(rows: list[dict]) -> list[dict]:
+    """Sort batch jobs by unrounded overall, skill coverage, then semantic score."""
+    return sorted(
+        rows,
+        key=lambda row: (
+            row.get("_overall_score", row["overall"] / 100),
+            row.get("_skill_coverage_score", row.get("skill_coverage", 0) / 100),
+            row.get("_semantic_score", row.get("semantic", 0) / 100),
+        ),
+        reverse=True,
+    )
 
 
 def sanitize_csv_cell(value: object) -> str:
