@@ -6,7 +6,7 @@ Compare a resume with a job description using local semantic embeddings, require
 
 [Production demo](https://ai-resume-screener-w6h3.onrender.com) | [Staging demo](https://ai-resume-screener-staging.onrender.com)
 
-The free hosting instance may take about a minute to wake up on its first request.
+The Render free-tier instance may take 1-2 minutes to wake up after idle on its first request.
 
 Gemini suggestions are optional. Add a free Gemini API key in the sidebar for the current session; without a key, rule-based suggestions are available every time. A `GEMINI_API_KEY` environment variable is also supported.
 
@@ -21,6 +21,14 @@ Gemini suggestions are optional. Add a free Gemini API key in the sidebar for th
 - **PDF input:** upload a resume PDF up to the configured size and page limits, or paste resume text.
 - **Memory-safe on Render's free 512 MB tier:** a 192 MB memory guard falls back to skill/keyword/TF-IDF scoring instead of crashing.
 
+### UI
+
+- Dark theme with a purple accent, animated score ring, and animated score tiles.
+- Evidence tables with score bars and a styled Bulk Resumes leaderboard.
+- Per-job skill chips in Batch Mode.
+- Scanning spinner during analysis.
+- Job-description text cleanup for pasted bullet glyphs.
+
 ## How scoring works
 
 When semantic embeddings are available, the overall score combines:
@@ -32,7 +40,7 @@ When semantic embeddings are available, the overall score combines:
 | Keyword match | 7.5% |
 | TF-IDF similarity | 7.5% |
 
-Semantic matching compares job requirements with resume evidence. Skill coverage checks required technical skill groups, keyword matching measures shared terms, and TF-IDF measures term-weighted similarity over filtered job-description requirements.
+Semantic matching compares job requirements with resume evidence. Skill coverage checks required technical skill groups, keyword matching measures shared terms, and TF-IDF measures term-weighted similarity over filtered job-description requirements. Batch Mode ranks jobs by unrounded overall score, then skill coverage, then semantic score.
 
 If embeddings are disabled, unavailable, or skipped because of memory pressure, the app uses the fallback score:
 
@@ -86,7 +94,7 @@ python -m pip install -r requirements-dev.txt
 python -m pytest -q
 ```
 
-The suite currently has 70 passing tests and 1 skipped.
+The suite currently has 83 passing tests and 1 skipped.
 
 ## Project structure
 
@@ -103,16 +111,22 @@ resume_screener/
 	pdf_parser.py
 	skills.py
 	suggestions.py
+	text_utils.py
+	ui_helpers.py
 	visualizer.py
 	skills.json
 	suggestions.json
 tests/
 	fixtures/
 	test_analyzer.py
+	test_app_compiles.py
 	test_bulk.py
 	test_fixture_screener.py
 	test_pdf_parser.py
 	test_suggestions.py
+	test_text_utils.py
+	test_ui_helpers.py
+	test_ui_helpers_leaderboard.py
 scripts/
 	calibrate.py
 	measure_memory.py
