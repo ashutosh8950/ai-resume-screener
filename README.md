@@ -2,9 +2,9 @@
 
 # AI Resume Screener
 
-Compare a resume with a job description using local semantic embeddings, requirement-level evidence, skill coverage, keyword matching, and TF-IDF. The app runs locally and does not require an API key for analysis.
+Compare a resume with a job description using local semantic embeddings, requirement-level evidence, skill coverage, keyword matching, and TF-IDF. The app is deployed on Render's free tier and also runs locally; analysis does not require an API key, with Gemini available optionally.
 
-[Production demo](https://ai-resume-screener-w6h3.onrender.com) | [Staging demo](https://ai-resume-screener-staging.onrender.com)
+[Production demo](https://ai-resume-screener-w6h3.onrender.com)
 
 The Render free-tier instance may take 1-2 minutes to wake up after idle on its first request.
 
